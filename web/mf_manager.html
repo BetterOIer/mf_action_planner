@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MF Manager</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: rgb(254, 186, 163);
+            height: 100vh;
+            overflow: hidden;
+            transition: background-color 0.3s;
+        }
+
+        body.team-red {
+            background-color: rgb(254, 186, 163);
+        }
+
+        body.team-blue {
+            background-color: rgb(129, 210, 214);
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+            align-items: flex-start;
+            padding-top: 10px;
+            padding-bottom: 10px;
+        }
+
+        /* ==================== ROS 状态（左上角） ==================== */
+        .ros-status {
+            position: fixed;
+            top: 6px;
+            left: 8px;
+            font-size: 11px;
+            color: #666;
+            background: rgba(255,255,255,0.9);
+            padding: 3px 10px;
+            border-radius: 12px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            z-index: 200;
+        }
+
+        /* ==================== 自动发送倒计时提示框 ==================== */
+        .auto-send-toast {
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #FFF8E1;
+            border: 2px solid #FFB300;
+            border-radius: 10px;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            z-index: 200;
+            font-size: 14px;
+            white-space: nowrap;
+            transition: opacity 0.2s;
+        }
+
+        .auto-send-toast.hidden {
+            display: none;
+        }
+
+        .auto-send-toast .toast-text {
+            color: #E65100;
+            font-weight: 500;
+        }
+
+        .auto-send-toast .toast-btn {
+            padding: 5px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            transition: opacity 0.15s;
+        }
+
+        .auto-send-toast .toast-btn:hover {
+            opacity: 0.85;
+        }
+
+        .auto-send-toast .toast-btn.cancel {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .auto-send-toast .toast-btn.send-now {
+            background: #4CAF50;
+            color: white;
+        }
+
+        /* ==================== 左侧工具栏面板 ==================== */
+        .toolbar-panel {
+            margin-left: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-top: 28px;
+            padding: 8px;
+            background: white;
+            border-radius: 0 10px 10px 0;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.10);
+            flex-shrink: 0;
+            align-self: flex-start;
+        }
+
+        .tool-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 7px;
+            cursor: pointer;
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+            transition: box-shadow 0.2s, opacity 0.2s, transform 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            line-height: 1.2;
+            flex-shrink: 0;
+        }
+
+        .tool-btn:hover {
+            box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+            opacity: 0.9;
+            transform: scale(1.05);
+        }
+
+        .tool-btn.active {
+            box-shadow: 0 3px 12px rgba(0,0,0,0.35);
+            opacity: 0.8;
+            outline: 2px solid #333;
+        }
+
+        .kfs1-btn { background-color: #0000FF; }
+        .kfs2-btn { background-color: #f44336; }
+        .kfs-fake-btn { background-color: #9E9E9E; }
+
+        .publish-btn {
+            background-color: #4CAF50;
+            margin-top: 4px;
+        }
+
+        .publish-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .publish-btn:disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        .clear-btn {
+            background-color: #6c757d;
+            margin-top: 4px;
+        }
+
+        .random-btn {
+            background-color: #FF9800;
+            margin-top: 4px;
+        }
+
+        /* ==================== 中间内容区域 ==================== */
+        .content-area {
+            flex: 1;
+            display: flex;
+            margin-left: 10px;
+            margin-right: 10px;
+            height: calc(100vh - 20px);
+            gap: 10px;
+        }
+
+        /* ---------- 布局器区域 (3) ---------- */
+        .grid-area {
+            flex: 3;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 4px;
+            min-width: 0;
+        }
+
+        .grid-container {
+            background-color: white;
+            padding: 14px 14px 10px 14px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .grid-wrapper {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .path-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 110px);
+            grid-template-rows: repeat(6, 110px);
+            gap: 3px;
+            background-color: #333;
+            padding: 3px;
+            border-radius: 8px;
+        }
+
+        .cell {
+            background-color: white;
+            border: 1px solid #ddd;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .cell:hover { background-color: #f0f0f0; }
+
+        .cell.blank {
+            background-color: #fafafa;
+            border: 2px dashed #ccc;
+            cursor: default;
+            color: #bbb;
+        }
+
+        .cell.kfs1 { background-color: rgba(0, 0, 255, 0.3); color: blue; }
+        .cell.kfs2 { background-color: rgba(255, 0, 0, 0.3); color: red; }
+        .cell.kfs-fake { background-color: rgba(128, 128, 128, 0.3); color: gray; }
+        .cell.disabled { background-color: #f5f5f5; cursor: not-allowed; }
+
+        /* ---------- 设置栏（拟态风） ---------- */
+        .settings-bar {
+            display: flex;
+            gap: 16px;
+            margin-top: 10px;
+            flex-shrink: 0;
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 0;
+            border-radius: 12px;
+            padding: 4px;
+            background: #e8e8e8;
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.12),
+                        inset -2px -2px 5px rgba(255,255,255,0.7);
+        }
+
+        .radio-btn {
+            padding: 5px 16px;
+            border: none;
+            background: transparent;
+            color: #888;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 9px;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .radio-btn:not(.active):hover {
+            color: #555;
+        }
+
+        .radio-btn.active {
+            background: #ececec;
+            color: #333;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.13),
+                        -2px -2px 5px rgba(255,255,255,0.8);
+        }
+
+        /* ---------- 路径列表区域 (5) — 3行×2列 ---------- */
+        .paths-area {
+            flex: 5;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 0;
+        }
+
+        .paths-row {
+            flex: 1;
+            display: flex;
+            gap: 5px;
+            min-height: 0;
+        }
+
+        .path-list-panel {
+            flex: 1;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .path-list-header {
+            padding: 5px 8px;
+            font-weight: bold;
+            font-size: 11px;
+            border-bottom: 1px solid #e8e8e8;
+            flex-shrink: 0;
+            background: #fafafa;
+            color: #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .path-list-header .badge {
+            font-size: 9px;
+            color: #888;
+            font-weight: normal;
+        }
+
+        .path-list-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2px 3px;
+        }
+
+        .path-list-scroll:empty::after {
+            content: '（暂无）';
+            display: block;
+            text-align: center;
+            color: #bbb;
+            padding: 10px;
+            font-size: 11px;
+        }
+
+        .path-list-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #bbb;
+            font-size: 12px;
+            padding: 12px;
+        }
+
+        /* 单条路径摘要行 */
+        .path-summary {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            padding: 4px 5px;
+            cursor: pointer;
+            border-radius: 4px;
+            user-select: none;
+            transition: background 0.15s;
+            border: 2px solid transparent;
+        }
+
+        .path-summary:hover { background: #f4f4f4; }
+
+        .path-summary.selected {
+            background: #E8F5E9;
+            border-color: #4CAF50;
+        }
+
+        .path-summary .arrow {
+            font-size: 9px;
+            width: 10px;
+            text-align: center;
+            flex-shrink: 0;
+            color: #666;
+        }
+
+        .path-summary .summary-idx {
+            font-size: 9px;
+            color: #999;
+            min-width: 18px;
+            text-align: right;
+        }
+
+        .path-summary .summary-steps {
+            flex: 1;
+            font-size: 11px;
+            color: #333;
+            min-width: 44px;
+        }
+
+        .path-summary .summary-cost {
+            font-size: 10px;
+            color: #e65100;
+            font-weight: bold;
+            min-width: 40px;
+            text-align: right;
+        }
+
+        .path-summary .summary-kfs1 {
+            font-size: 10px;
+            color: #1565C0;
+            min-width: 38px;
+            text-align: right;
+        }
+
+        .path-detail {
+            display: none;
+            padding: 2px 4px 5px 14px;
+            font-size: 10px;
+            color: #555;
+            border-bottom: 1px solid #f0f0f0;
+            margin-bottom: 1px;
+        }
+
+        .path-detail.open { display: block; }
+
+        .path-detail .step-line {
+            display: flex;
+            align-items: baseline;
+            gap: 3px;
+            padding: 1px 0;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 9px;
+        }
+
+        .path-detail .step-tag {
+            display: inline-block;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+            font-size: 8px;
+            min-width: 28px;
+            text-align: center;
+        }
+
+        .step-tag.move { background: #E3F2FD; color: #1565C0; }
+        .step-tag.fetch { background: #FFF3E0; color: #E65100; }
+        .path-detail .step-coords { color: #666; }
+    </style>
+</head>
+<body class="team-red">
+    <!-- ROS 状态（左上角） -->
+    <div class="ros-status" id="ros-status">ROS: 未连接</div>
+
+    <!-- 自动发送倒计时提示框 -->
+    <div class="auto-send-toast hidden" id="auto-send-toast">
+        <span class="toast-text" id="toast-text">10 秒后自动发送 KFS2=2 路径 #1</span>
+        <button class="toast-btn cancel" onclick="cancelAutoSend(true)">取消</button>
+        <button class="toast-btn send-now" onclick="sendNow()">立即发送</button>
+    </div>
+
+    <div class="app-container">
+        <!-- ========== 左侧工具栏面板 ========== -->
+        <div class="toolbar-panel" id="toolbar">
+            <button class="tool-btn kfs1-btn" id="kfs1-btn" onclick="selectMode('kfs1')">KFS1</button>
+            <button class="tool-btn kfs2-btn" id="kfs2-btn" onclick="selectMode('kfs2')">KFS2</button>
+            <button class="tool-btn kfs-fake-btn" id="kfs-fake-btn" onclick="selectMode('kfs-fake')">K假</button>
+            <button class="tool-btn publish-btn" id="publish-btn" onclick="publishSelectedPath()" disabled>发送</button>
+            <button class="tool-btn clear-btn" onclick="clearGrid()">清空</button>
+            <button class="tool-btn random-btn" onclick="randomPlacement(true)">随机</button>
+        </div>
+
+        <!-- ========== 中间内容区 (3:5) ========== -->
+        <div class="content-area">
+            <!-- 布局器 (3) -->
+            <div class="grid-area">
+                <div class="grid-container">
+                    <div class="grid-wrapper">
+                        <div class="grid" id="grid"></div>
+                        <canvas class="path-overlay" id="path-overlay"></canvas>
+                    </div>
+
+                    <!-- 设置栏：队伍 / 底盘 -->
+                    <div class="settings-bar">
+                        <div class="radio-group" id="team-group">
+                            <button class="radio-btn active" data-value="red" onclick="setTeam('red')">红队</button>
+                            <button class="radio-btn" data-value="blue" onclick="setTeam('blue')">蓝队</button>
+                        </div>
+                        <div class="radio-group" id="method-group">
+                            <button class="radio-btn active" data-value="uni" onclick="setMethod(0)">单向</button>
+                            <button class="radio-btn" data-value="omni" onclick="setMethod(1)">全向</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 路径列表 (5) — 3行 × 2列 -->
+            <div class="paths-area" id="paths-area">
+                <div class="paths-row">
+                    <div class="path-list-panel" id="panel-custom">
+                        <div class="path-list-header">自定义路线</div>
+                        <div class="path-list-placeholder">（待配置）</div>
+                    </div>
+                    <div class="path-list-panel" id="panel-kfs2-0">
+                        <div class="path-list-header">KFS2 = 0<span class="badge" id="badge-0"></span></div>
+                        <div class="path-list-scroll" id="scroll-0"></div>
+                    </div>
+                </div>
+                <div class="paths-row">
+                    <div class="path-list-panel" id="panel-kfs2-1">
+                        <div class="path-list-header">KFS2 = 1<span class="badge" id="badge-1"></span></div>
+                        <div class="path-list-scroll" id="scroll-1"></div>
+                    </div>
+                    <div class="path-list-panel" id="panel-kfs2-2">
+                        <div class="path-list-header">KFS2 = 2<span class="badge" id="badge-2"></span></div>
+                        <div class="path-list-scroll" id="scroll-2"></div>
+                    </div>
+                </div>
+                <div class="paths-row">
+                    <div class="path-list-panel" id="panel-kfs2-3">
+                        <div class="path-list-header">KFS2 = 3<span class="badge" id="badge-3"></span></div>
+                        <div class="path-list-scroll" id="scroll-3"></div>
+                    </div>
+                    <div class="path-list-panel" id="panel-kfs2-4">
+                        <div class="path-list-header">KFS2 = 4<span class="badge" id="badge-4"></span></div>
+                        <div class="path-list-scroll" id="scroll-4"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/roslib@1.3.0/build/roslib.min.js"></script>
+    <script>
+        // ========================
+        // 网格状态
+        // ========================
+        let grid = Array(6).fill().map(() => Array(3).fill(0));
+        let selectedMode = null;
+        let counts = { 'kfs1': 0, 'kfs2': 0, 'kfs-fake': 0 };
+
+        // 队伍 & 底盘
+        let currentTeam = 'red';
+        let currentMethod = 1;   // 1=uni, 0=omni
+
+        // 路径选择状态
+        let selectedPath = null;
+
+        // ========================
+        // 设置栏切换
+        // ========================
+        function setTeam(team) {
+            currentTeam = team;
+            document.body.className = 'team-' + team;
+            document.querySelectorAll('#team-group .radio-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.value === team);
+            });
+            publishR2Data();
+        }
+
+        function setMethod(method) {
+            currentMethod = !method;
+            document.querySelectorAll('#method-group .radio-btn').forEach((b, i) => {
+                b.classList.toggle('active', i === method);
+            });
+            publishR2Data();
+        }
+
+        // ========================
+        // ROS 连接
+        // ========================
+        const rosStatus = document.getElementById('ros-status');
+        let ros = new ROSLIB.Ros({ url: 'ws://localhost:9090' });
+
+        ros.on('error', function(error) {
+            console.log('Error connecting to ROS:', error);
+            rosStatus.textContent = 'ROS: 错误';
+            rosStatus.style.color = '#e53935';
+        });
+
+        ros.on('close', function() {
+            console.log('Connection to ROS closed');
+            rosStatus.textContent = 'ROS: 断开';
+            rosStatus.style.color = '#aaa';
+        });
+
+        ros.on('connection', function() {
+            console.log('Connected to ROS');
+            rosStatus.textContent = 'ROS: 已连接';
+            rosStatus.style.color = '#43A047';
+            setTimeout(() => { randomPlacement(true); }, 500);
+        });
+
+        // /mf_r2_data 发布器（合并 grid + team + method）
+        const r2Publisher = new ROSLIB.Topic({
+            ros: ros,
+            name: '/mf_r2_data',
+            messageType: 'std_msgs/String'
+        });
+
+        // 路径数据订阅器
+        const pathsForWebSub = new ROSLIB.Topic({
+            ros: ros,
+            name: '/planning/paths_for_web',
+            messageType: 'std_msgs/String'
+        });
+
+        pathsForWebSub.subscribe(function(message) {
+            try {
+                const data = JSON.parse(message.data);
+                renderPaths(data);
+            } catch (e) {
+                console.error('Failed to parse paths_for_web:', e);
+            }
+        });
+
+        // 行动序列发布器 → /mf_action_seq
+        const actionSeqPublisher = new ROSLIB.Topic({
+            ros: ros,
+            name: '/mf_action_seq',
+            messageType: 'std_msgs/Float32MultiArray'
+        });
+
+        // ========================
+        // 路径渲染
+        // ========================
+        function formatStep(step) {
+            const action = step[0] === 0 ? 'move' : 'fetch';
+            const x = Math.round(step[1]);
+            const y = Math.round(step[2]);
+            const z = step[3];
+            const yaw = typeof step[4] === 'number' ? step[4].toFixed(2) : step[4];
+            if (step[0] === 0) {
+                return { action, text: `(${x}, ${y}, ${z}, ${yaw} rad)` };
+            } else {
+                return { action, text: `(${x}, ${y}, Δh=${z}, ${yaw} rad)` };
+            }
+        }
+
+        function renderPaths(data) {
+            const buckets = data.buckets || [];
+            clearSelection();
+
+            buckets.forEach(bucket => {
+                const k = bucket.kfs2_count;
+                const scrollEl = document.getElementById('scroll-' + k);
+                const badgeEl = document.getElementById('badge-' + k);
+                if (!scrollEl || !badgeEl) return;
+
+                badgeEl.textContent = '共' + bucket.total + '条/显' + bucket.paths.length + '条';
+
+                let html = '';
+                bucket.paths.forEach((entry, idx) => {
+                    html += '<div class="path-summary" onclick="onPathClick(this, ' + k + ', ' + idx + ')" data-bucket="' + k + '" data-idx="' + idx + '">';
+                    html += '<span class="arrow">▶</span>';
+                    html += '<span class="summary-idx">#' + entry.index + '</span>';
+                    html += '<span class="summary-steps">' + entry.steps + ' 步</span>';
+                    html += '<span class="summary-cost">消耗' + entry.cost + '</span>';
+                    html += '<span class="summary-kfs1">K1×' + entry.kfs1_affected + '</span>';
+                    html += '</div>';
+
+                    html += '<div class="path-detail" id="detail-' + k + '-' + idx + '">';
+                    const detail = entry.detail || [];
+                    detail.forEach((step, si) => {
+                        const fmt = formatStep(step);
+                        html += '<div class="step-line">';
+                        html += '<span style="color:#999;">' + (si + 1) + '.</span>';
+                        html += '<span class="step-tag ' + fmt.action + '">' + fmt.action + '</span>';
+                        html += '<span class="step-coords">' + fmt.text + '</span>';
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                });
+                scrollEl.innerHTML = html;
+            });
+
+            startAutoSend(data);
+        }
+
+        function onPathClick(summaryEl, bucket, idx) {
+            const isExpanded = summaryEl.classList.contains('expanded');
+            const detailEl = document.getElementById('detail-' + bucket + '-' + idx);
+
+            if (isExpanded) {
+                summaryEl.classList.remove('expanded');
+                summaryEl.querySelector('.arrow').textContent = '▶';
+                if (detailEl) detailEl.classList.remove('open');
+            } else {
+                summaryEl.classList.add('expanded');
+                summaryEl.querySelector('.arrow').textContent = '▼';
+                if (detailEl) detailEl.classList.add('open');
+            }
+
+            selectPath(summaryEl, bucket, idx);
+        }
+
+        function selectPath(summaryEl, bucket, idx, keepAutoSend) {
+            if (!keepAutoSend) {
+                cancelAutoSend(true);
+            }
+
+            document.querySelectorAll('.path-summary.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+
+            summaryEl.classList.add('selected');
+
+            if (cachedPathData && cachedPathData.buckets) {
+                const bucketData = cachedPathData.buckets.find(b => b.kfs2_count === bucket);
+                if (bucketData && bucketData.paths[idx]) {
+                    const entry = bucketData.paths[idx];
+                    selectedPath = {
+                        bucket: bucket,
+                        idx: idx,
+                        detail: entry.detail,
+                        cost: entry.cost,
+                        steps: entry.steps,
+                        kfs1: entry.kfs1_affected,
+                        index: entry.index,
+                    };
+                }
+            }
+
+            document.getElementById('publish-btn').disabled = false;
+            if (selectedPath && selectedPath.detail) {
+                drawPathOnGrid(selectedPath.detail);
+            }
+        }
+
+        function clearSelection() {
+            selectedPath = null;
+            document.querySelectorAll('.path-summary.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+            document.getElementById('publish-btn').disabled = true;
+            clearPathOverlay();
+        }
+
+        let cachedPathData = null;
+
+        const originalRenderPaths = renderPaths;
+        renderPaths = function(data) {
+            cachedPathData = data;
+            originalRenderPaths(data);
+        };
+
+        // ========================
+        // 路径在网格上的绘制
+        // ========================
+        const CELL_SIZE = 110;
+        const CELL_GAP = 3;
+        const CELL_PAD = 3;
+
+        function gridToPixel(gx, gy) {
+            const col = 2 - gy;
+            const row = 5 - gx;
+            return {
+                px: CELL_PAD + col * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2,
+                py: CELL_PAD + row * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2,
+            };
+        }
+
+        function drawPathOnGrid(detail) {
+            const canvas = document.getElementById('path-overlay');
+            const gridEl = document.getElementById('grid');
+            if (!canvas || !gridEl) return;
+
+            const ctx = canvas.getContext('2d');
+            canvas.width = gridEl.offsetWidth;
+            canvas.height = gridEl.offsetHeight;
+            canvas.style.width = gridEl.offsetWidth + 'px';
+            canvas.style.height = gridEl.offsetHeight + 'px';
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (!detail || detail.length === 0) return;
+
+            const movePoints = [];
+            detail.forEach(step => {
+                if (step[0] === 0) {
+                    const pos = gridToPixel(Math.round(step[1]), Math.round(step[2]));
+                    movePoints.push(pos);
+                }
+            });
+
+            // 1. 绿色实线
+            if (movePoints.length >= 2) {
+                ctx.beginPath();
+                ctx.setLineDash([]);
+                ctx.strokeStyle = '#2E7D32';
+                ctx.lineWidth = 3;
+                ctx.moveTo(movePoints[0].px, movePoints[0].py);
+                for (let i = 1; i < movePoints.length; i++) {
+                    ctx.lineTo(movePoints[i].px, movePoints[i].py);
+                }
+                ctx.stroke();
+            }
+
+            // 2. 黄色虚线 + 收集 fetch 端点
+            let lastMovePos = null;
+            const fetchPoints = [];
+            detail.forEach(step => {
+                if (step[0] === 0) {
+                    lastMovePos = gridToPixel(Math.round(step[1]), Math.round(step[2]));
+                } else if (step[0] === 1) {
+                    const fpos = gridToPixel(Math.round(step[1]), Math.round(step[2]));
+                    fetchPoints.push(fpos);
+
+                    if (lastMovePos) {
+                        ctx.beginPath();
+                        ctx.setLineDash([4, 3]);
+                        ctx.strokeStyle = '#F9A825';
+                        ctx.lineWidth = 1.5;
+                        ctx.moveTo(lastMovePos.px, lastMovePos.py);
+                        ctx.lineTo(fpos.px, fpos.py);
+                        ctx.stroke();
+                    }
+                }
+            });
+
+            // 3. 绿色实心圆
+            movePoints.forEach(pt => {
+                ctx.beginPath();
+                ctx.setLineDash([]);
+                ctx.arc(pt.px, pt.py, 7, 0, 2 * Math.PI);
+                ctx.fillStyle = '#2E7D32';
+                ctx.fill();
+            });
+
+            // 4. 黄色空心圆（最后画，不被覆盖）
+            fetchPoints.forEach(fpos => {
+                ctx.beginPath();
+                ctx.setLineDash([]);
+                ctx.arc(fpos.px, fpos.py, 5, 0, 2 * Math.PI);
+                ctx.strokeStyle = '#F9A825';
+                ctx.lineWidth = 1.8;
+                ctx.stroke();
+            });
+        }
+
+        function clearPathOverlay() {
+            const canvas = document.getElementById('path-overlay');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // ========================
+        // 发布路径到 /mf_action_seq
+        // ========================
+        function publishPath(detail, cost, kfs1) {
+            if (!detail || detail.length === 0) return;
+
+            const numSteps = detail.length;
+            const flatData = [];
+            detail.forEach(step => {
+                for (let i = 0; i < 8; i++) {
+                    flatData.push(Number(step[i]));
+                }
+            });
+
+            const msg = new ROSLIB.Message({
+                layout: {
+                    dim: [
+                        { label: 'step', size: numSteps, stride: 8 },
+                        { label: 'field', size: 8, stride: 1 }
+                    ],
+                    data_offset: 0
+                },
+                data: flatData
+            });
+
+            actionSeqPublisher.publish(msg);
+            const label = (cost !== undefined && cost !== null) ? (' | 消耗' + cost) : '';
+            rosStatus.textContent = '已发送 ' + numSteps + ' 步' + label;
+            rosStatus.style.color = '#4CAF50';
+            setTimeout(() => {
+                rosStatus.textContent = 'ROS: 已连接';
+                rosStatus.style.color = '#43A047';
+            }, 3000);
+        }
+
+        function publishSelectedPath() {
+            if (!selectedPath || !selectedPath.detail || selectedPath.detail.length === 0) {
+                console.warn('No path selected');
+                return;
+            }
+            cancelAutoSend(true);
+            publishPath(selectedPath.detail, selectedPath.cost, selectedPath.kfs1);
+        }
+
+        // ========================
+        // 自动发送倒计时
+        // ========================
+        let autoSendTimer = null;
+        let autoSendTarget = null;
+        let autoSendSeconds = 10;
+
+        function startAutoSend(data) {
+            cancelAutoSend(false);
+
+            const buckets = data.buckets || [];
+            let pick = null;
+
+            const b2 = buckets.find(b => b.kfs2_count === 2);
+            if (b2 && b2.paths.length > 0) {
+                pick = { bucket: 2, entry: b2.paths[0] };
+            } else {
+                const b3 = buckets.find(b => b.kfs2_count === 3);
+                if (b3 && b3.paths.length > 0) {
+                    pick = { bucket: 3, entry: b3.paths[0] };
+                }
+            }
+
+            if (!pick) return;
+
+            autoSendTarget = {
+                detail: pick.entry.detail,
+                cost: pick.entry.cost,
+                kfs1: pick.entry.kfs1_affected,
+                bucket: pick.bucket,
+                index: pick.entry.index,
+            };
+            autoSendSeconds = 10;
+
+            document.getElementById('auto-send-toast').classList.remove('hidden');
+            updateToastText();
+
+            const summaryEl = document.querySelector(
+                '.path-summary[data-bucket="' + pick.bucket + '"][data-idx="0"]'
+            );
+            if (summaryEl) {
+                selectPath(summaryEl, pick.bucket, 0, true);
+            }
+
+            autoSendTimer = setInterval(() => {
+                autoSendSeconds--;
+                if (autoSendSeconds <= 0) {
+                    clearInterval(autoSendTimer);
+                    autoSendTimer = null;
+                    executeAutoSend();
+                } else {
+                    updateToastText();
+                }
+            }, 1000);
+        }
+
+        function updateToastText() {
+            if (!autoSendTarget) return;
+            document.getElementById('toast-text').textContent =
+                autoSendSeconds + ' 秒后自动发送 KFS2=' +
+                autoSendTarget.bucket + ' 路径 #' + autoSendTarget.index;
+        }
+
+        function cancelAutoSend(hideToast) {
+            if (autoSendTimer) {
+                clearInterval(autoSendTimer);
+                autoSendTimer = null;
+            }
+            autoSendTarget = null;
+            if (hideToast) {
+                document.getElementById('auto-send-toast').classList.add('hidden');
+            }
+        }
+
+        function sendNow() {
+            if (!autoSendTarget) return;
+            const target = autoSendTarget;
+            cancelAutoSend(true);
+            publishPath(target.detail, target.cost, target.kfs1);
+        }
+
+        function executeAutoSend() {
+            if (!autoSendTarget) return;
+            const target = autoSendTarget;
+            cancelAutoSend(true);
+            publishPath(target.detail, target.cost, target.kfs1);
+        }
+
+        // ========================
+        // 网格逻辑
+        // ========================
+        function initializeGrid() {
+            const gridElement = document.getElementById('grid');
+            gridElement.innerHTML = '';
+
+            for (let row = 0; row < 6; row++) {
+                for (let col = 0; col < 3; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.id = `cell-${row}-${col}`;
+                    const x = 5 - row;
+                    const y = 2 - col;
+                    if (row === 0 || row === 5) {
+                        cell.classList.add('blank');
+                        cell.textContent = `(${x}, ${y})`;
+                    } else {
+                        cell.textContent = `(${x}, ${y})`;
+                        cell.onclick = () => placeMarker(row, col);
+                    }
+                    gridElement.appendChild(cell);
+                }
+            }
+
+            updateCellStates();
+        }
+
+        function selectMode(mode) {
+            selectedMode = mode;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`${mode}-btn`).classList.add('active');
+            updateCellStates();
+        }
+
+        function placeMarker(row, col) {
+            if (row === 0 || row === 5) return;
+            if (grid[row][col] !== 0) { clearCell(row, col); return; }
+            if (!selectedMode) return;
+            if (!canPlaceMarker(selectedMode, row, col)) return;
+
+            grid[row][col] = getMarkerValue(selectedMode);
+            counts[selectedMode]++;
+
+            updateCellStates();
+            publishR2Data();
+        }
+
+        function clearCell(row, col) {
+            const value = grid[row][col];
+            if (value === 0) return;
+            if (value === 1) counts.kfs1--;
+            else if (value === 2) counts.kfs2--;
+            else if (value === 3) counts['kfs-fake']--;
+            grid[row][col] = 0;
+            updateCellStates();
+            publishR2Data();
+        }
+
+        function canPlaceMarker(mode, row, col) {
+            if (row === 0 || row === 5) return false;
+            switch (mode) {
+                case 'kfs1':
+                    if (counts.kfs1 >= 3) return false;
+                    if (!(row === 1 || row === 4 || col === 0 || col === 2)) return false;
+                    break;
+                case 'kfs2':
+                    if (counts.kfs2 >= 4) return false;
+                    break;
+                case 'kfs-fake':
+                    if (counts['kfs-fake'] >= 1) return false;
+                    if (row === 4) return false;
+                    break;
+            }
+            return true;
+        }
+
+        function getMarkerValue(mode) {
+            switch (mode) {
+                case 'kfs1': return 1;
+                case 'kfs2': return 2;
+                case 'kfs-fake': return 3;
+                default: return 0;
+            }
+        }
+
+        function getMarkerClass(value) {
+            switch (value) {
+                case 1: return 'kfs1';
+                case 2: return 'kfs2';
+                case 3: return 'kfs-fake';
+                default: return '';
+            }
+        }
+
+        function updateCellStates() {
+            for (let row = 0; row < 6; row++) {
+                for (let col = 0; col < 3; col++) {
+                    const cell = document.getElementById(`cell-${row}-${col}`);
+                    const value = grid[row][col];
+                    cell.classList.remove('kfs1', 'kfs2', 'kfs-fake', 'disabled');
+                    if (row === 0 || row === 5) {
+                        cell.classList.add('blank');
+                        continue;
+                    }
+                    if (value !== 0) {
+                        cell.classList.add(getMarkerClass(value));
+                    } else if (selectedMode && !canPlaceMarker(selectedMode, row, col)) {
+                        cell.classList.add('disabled');
+                    }
+                }
+            }
+        }
+
+        function clearGrid() {
+            grid = Array(6).fill().map(() => Array(3).fill(0));
+            counts = { 'kfs1': 0, 'kfs2': 0, 'kfs-fake': 0 };
+            selectedMode = null;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            updateCellStates();
+            publishR2Data();
+        }
+
+        function randomPlacement(autoPublish) {
+            clearGrid();
+            const placementRules = {
+                'kfs1': { maxCount: 3, validColumns: [0, 1, 2], validRows: [1, 2, 3, 4] },
+                'kfs2': { maxCount: 4, validColumns: [0, 1, 2], validRows: [1, 2, 3, 4] },
+                'kfs-fake': { maxCount: 1, validColumns: [0, 1, 2], validRows: [1, 2, 3] }
+            };
+            Object.keys(placementRules).forEach(markerType => {
+                const rule = placementRules[markerType];
+                for (let i = 0; i < rule.maxCount; i++) {
+                    let attempts = 0;
+                    let placed = false;
+                    while (!placed && attempts < 50) {
+                        const row = rule.validRows[Math.floor(Math.random() * rule.validRows.length)];
+                        const col = rule.validColumns[Math.floor(Math.random() * rule.validColumns.length)];
+                        if (markerType === 'kfs1' && !(row === 1 || row === 4 || col === 0 || col === 2)) {
+                            attempts++; continue;
+                        }
+                        if (markerType === 'kfs-fake' && row === 4) {
+                            attempts++; continue;
+                        }
+                        if (grid[row][col] === 0) {
+                            grid[row][col] = getMarkerValue(markerType);
+                            counts[markerType]++;
+                            placed = true;
+                        }
+                        attempts++;
+                    }
+                }
+            });
+            updateCellStates();
+            if (autoPublish) publishR2Data();
+        }
+
+        function publishR2Data() {
+            // 上下左右翻转：原 bridge 节点做的变换移到这里
+            // reversed(rows) → 上下翻，reversed(cols) → 左右翻
+            const flipped = grid.slice().reverse().map(row => [...row].reverse());
+            const data = {
+                grid: flipped,
+                team: currentTeam,
+                method: currentMethod,
+                timestamp: Date.now()
+            };
+            const message = new ROSLIB.Message({
+                data: JSON.stringify(data)
+            });
+            r2Publisher.publish(message);
+            console.log('Published /mf_r2_data:', data);
+        }
+
+        // ========================
+        // 初始化
+        // ========================
+        initializeGrid();
+    </script>
+</body>
+</html>
