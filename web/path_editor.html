@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>路径编辑器</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: rgb(254, 186, 163);
+            height: 100vh;
+            overflow: hidden;
+            transition: background-color 0.3s;
+        }
+        body.team-red  { background-color: rgb(254, 186, 163); }
+        body.team-blue { background-color: rgb(129, 210, 214); }
+
+        /* ==================== 返回按钮 ==================== */
+        .back-btn {
+            position: fixed; top: 10px; left: 14px;
+            padding: 6px 16px; border: none; border-radius: 8px;
+            background-color: #607D8B; color: white;
+            font-size: 13px; font-weight: bold; cursor: pointer;
+            z-index: 200; box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            transition: opacity 0.2s, transform 0.15s;
+        }
+        .back-btn:hover { opacity: 0.85; transform: scale(1.05); }
+
+        /* ==================== 页面标题 ==================== */
+        .page-title {
+            position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
+            font-size: 13px; font-weight: bold; color: #888;
+            background: rgba(255,255,255,0.85); padding: 4px 14px;
+            border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); z-index: 199;
+        }
+
+        /* ==================== 主布局 ==================== */
+        .app-container {
+            display: flex; height: 100vh;
+            align-items: center; justify-content: center;
+        }
+
+        /* ==================== 左侧工具面板容器 ==================== */
+        .tool-panels {
+            display: flex; flex-direction: column; gap: 12px;
+            margin-top: 10px; margin-right: 14px;
+            flex-shrink: 0; align-self: flex-start;
+            position: relative; z-index: 300;
+        }
+
+        .editor-panel {
+            display: flex; flex-direction: column; gap: 5px;
+            padding: 8px; background: white;
+            border-radius: 10px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.10);
+        }
+
+        .tool-btn {
+            width: 44px; height: 44px; border: none; border-radius: 7px;
+            cursor: pointer; font-size: 10px; font-weight: bold; color: white;
+            transition: box-shadow 0.2s, opacity 0.2s, transform 0.15s;
+            display: flex; align-items: center; justify-content: center;
+            text-align: center; line-height: 1.2; flex-shrink: 0;
+        }
+        .tool-btn:hover { box-shadow: 0 3px 8px rgba(0,0,0,0.25); opacity: 0.9; transform: scale(1.05); }
+        .tool-btn.active { box-shadow: 0 3px 12px rgba(0,0,0,0.35); outline: 2px solid #333; }
+
+        .move-btn  { background-color: #2E7D32; }
+        .fetch-btn { background-color: #F9A825; color: #333; }
+        .clear-btn { background-color: #6c757d; }
+        .publish-btn { background-color: #4CAF50; }
+        .publish-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+        .publish-btn:disabled:hover { transform: none; box-shadow: none; opacity: 1; }
+
+        /* ==================== ROS 状态 ==================== */
+        .ros-status {
+            position: fixed; bottom: 10px; left: 8px;
+            font-size: 10px; color: #666;
+            background: rgba(255,255,255,0.9); padding: 2px 10px;
+            border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            z-index: 200;
+        }
+
+        /* ==================== 网格区域 ==================== */
+        .grid-area {
+            display: flex; flex-direction: column; align-items: center;
+            margin-top: 10px;
+            align-self: flex-start;
+        }
+
+        .grid-container {
+            background-color: white; padding: 14px 14px 10px 14px;
+            border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        .grid-wrapper {
+            position: relative; display: flex;
+            flex-direction: column; align-items: center;
+        }
+
+        .path-overlay {
+            position: absolute; top: 0; left: 0;
+            z-index: 10; cursor: crosshair;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 110px);
+            grid-template-rows: repeat(6, 110px);
+            gap: 3px; background-color: #333;
+            padding: 3px; border-radius: 8px;
+        }
+
+        .cell {
+            background-color: white; border: 1px solid #ddd;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: bold; position: relative;
+            cursor: default; user-select: none;
+        }
+        .cell.blank { background-color: #fafafa; border: 2px dashed #ccc; color: #bbb; }
+        .cell.kfs1 { background-color: rgba(0, 0, 255, 0.3); color: blue; }
+        .cell.kfs2 { background-color: rgba(255, 0, 0, 0.3); color: red; }
+        .cell.kfs-fake { background-color: rgba(128, 128, 128, 0.3); color: gray; }
+        .cell.highlight-move { box-shadow: inset 0 0 0 4px rgba(46,125,50,0.6); }
+        .cell.highlight-fetch { box-shadow: inset 0 0 0 4px rgba(249,168,37,0.6); }
+
+        /* ==================== 设置栏 ==================== */
+        .settings-bar { display: flex; gap: 16px; margin-top: 10px; flex-shrink: 0; }
+        .radio-group {
+            display: flex; gap: 0; border-radius: 12px; padding: 4px;
+            background: #e8e8e8;
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.12),
+                        inset -2px -2px 5px rgba(255,255,255,0.7);
+        }
+        .radio-btn {
+            padding: 5px 16px; border: none; background: transparent;
+            color: #888; font-size: 12px; font-weight: 600; border-radius: 9px;
+            user-select: none; cursor: default; pointer-events: none;
+        }
+        .radio-btn.active {
+            background: #ececec; color: #333;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.13),
+                        -2px -2px 5px rgba(255,255,255,0.8);
+        }
+
+        /* ==================== 右侧路径查看面板 ==================== */
+        .path-viewer {
+            display: flex; flex-direction: column;
+            margin-top: 10px; margin-left: 14px;
+            flex-shrink: 0; align-self: flex-start;
+            position: relative; z-index: 300;
+            width: 200px; max-height: calc(100vh - 30px);
+            background: white; border-radius: 10px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.10);
+            overflow: hidden;
+        }
+        .path-viewer-header {
+            padding: 6px 10px; font-size: 11px; font-weight: bold;
+            color: #555; border-bottom: 1px solid #eee;
+            background: #fafafa; flex-shrink: 0;
+        }
+        .path-viewer-scroll {
+            flex: 1; overflow-y: auto; padding: 4px 6px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 10px; line-height: 1.4; color: #333;
+        }
+        .path-viewer-scroll:empty::after {
+            content: '（暂无动作）'; color: #bbb; font-family: Arial, sans-serif;
+        }
+        .pv-step {
+            display: flex; align-items: baseline; gap: 3px;
+            padding: 1px 0; border-bottom: 1px solid #f5f5f5;
+        }
+        .pv-idx { color: #999; min-width: 18px; text-align: right; font-size: 9px; }
+        .pv-tag {
+            display: inline-block; padding: 0px 4px; border-radius: 3px;
+            font-weight: bold; font-size: 8px; min-width: 28px; text-align: center;
+        }
+        .pv-tag.move  { background: #E3F2FD; color: #1565C0; }
+        .pv-tag.fetch { background: #FFF3E0; color: #E65100; }
+        .pv-coords { color: #555; }
+        .pv-extra { color: #888; font-size: 9px; }
+
+        /* ---------- debug 状态栏 ---------- */
+        .debug-bar {
+            position: fixed; top: 6px; right: 8px;
+            font-size: 10px; color: #333; font-family: 'Consolas', monospace;
+            background: rgba(255,255,255,0.92); padding: 4px 10px;
+            border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.12);
+            z-index: 300; line-height: 1.5; max-width: 260px;
+        }
+    </style>
+</head>
+<body class="team-red">
+    <button class="back-btn" onclick="goBack()">← 返回</button>
+    <div class="page-title" id="page-title">路径编辑器</div>
+    <div class="debug-bar" id="debug-bar">等待操作...</div>
+    <div class="ros-status" id="ros-status">ROS: 未连接</div>
+
+    <div class="app-container">
+        <!-- ========== 左侧工具面板 ========== -->
+        <div class="tool-panels">
+            <div class="editor-panel" id="editor-panel">
+                <button class="tool-btn move-btn"  id="move-btn"  onclick="activateTool('move')">移动</button>
+                <button class="tool-btn fetch-btn" id="fetch-btn" onclick="activateTool('fetch')">抓取</button>
+                <button class="tool-btn clear-btn" id="clear-btn" onclick="clearPath()">清空</button>
+            </div>
+            <div class="editor-panel">
+                <button class="tool-btn publish-btn" id="publish-btn" onclick="publishCustomPath()" disabled>发送</button>
+            </div>
+        </div>
+
+        <!-- ========== 布局器（居中） ========== -->
+        <div class="grid-area">
+            <div class="grid-container">
+                <div class="grid-wrapper" id="grid-wrapper">
+                    <div class="grid" id="grid"></div>
+                    <canvas class="path-overlay" id="path-overlay"></canvas>
+                </div>
+                <div class="settings-bar">
+                    <div class="radio-group" id="team-group">
+                        <button class="radio-btn active" data-value="red">红队</button>
+                        <button class="radio-btn" data-value="blue">蓝队</button>
+                    </div>
+                    <div class="radio-group" id="method-group">
+                        <button class="radio-btn active" data-value="uni">单向</button>
+                        <button class="radio-btn" data-value="omni">全向</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 右侧路径查看器 ========== -->
+        <div class="path-viewer" id="path-viewer">
+            <div class="path-viewer-header">动作序列</div>
+            <div class="path-viewer-scroll" id="path-viewer-scroll"></div>
+        </div>
+    </div>
+
+    <script src="roslib.min.js"></script>
+    <script>
+    // ============================================================
+    //  常量
+    // ============================================================
+    const CELL_SIZE = 110, CELL_GAP = 3, CELL_PAD = 3;
+    const HIT_RADIUS = 35;  // 拖拽命中半径（像素）
+
+    // ============================================================
+    //  全局状态
+    // ============================================================
+    const editorData  = JSON.parse(sessionStorage.getItem('mf_path_editor_data') || '{}');
+    const kfsGrid     = editorData.grid || Array(6).fill().map(() => Array(3).fill(0));
+    const team        = editorData.team || 'red';
+    const method      = editorData.method !== undefined ? editorData.method : 1;
+    const editorMode  = editorData.mode || 'new';
+    const pathInfo    = editorData.pathInfo || null;
+
+    // 路径数据模型
+    let editorPath = { moveNodes: [], fetchNodes: [], nextId: 1 };
+    // moveNode: {id, x, y, z, yaw, prevId|null, nextId|null, fetchIds:[]}
+    // fetchNode: {id, x, y, z, yaw, parentMoveId}
+    let entryY = null;  // 入口 y 坐标（null 表示无入口）
+
+    // ============================================================
+    //  高度数据（mm，对应 web 网格 row 0~5 / x 5~0）
+    // ============================================================
+    // 高度数组已做上下+左右翻转，与 publishR2Data 对齐到屏幕坐标系
+    const HEIGHT_RED = [
+        [0,   0,   0],
+        [200, 400, 200],
+        [400, 600, 400],
+        [200, 400, 600],
+        [400, 200, 400],
+        [0,   0,   0],
+    ];
+    const HEIGHT_BLUE = [
+        [0,   0,   0],
+        [200, 400, 200],
+        [400, 600, 400],
+        [600, 400, 200],
+        [400, 200, 400],
+        [0,   0,   0],
+    ];
+
+    function getHeight(x, y) {
+        const row = 5 - x, col = 2 - y;
+        const h = team === 'blue' ? HEIGHT_BLUE : HEIGHT_RED;
+        return (h[row] && h[row][col] !== undefined) ? h[row][col] : 0;
+    }
+
+    /** 计算从 (x1,y1) 指向 (x2,y2) 的朝向（弧度，0=↑ 逆时针为正） */
+    function calcYaw(x1, y1, x2, y2) {
+        return Math.atan2(y2 - y1, x2 - x1);
+    }
+
+    /** 构建完整动作序列 [ [action,x,y,z_or_dh,yaw,0,0,0], ... ] */
+    function buildActionSequence() {
+        const seq = [];
+        const isOmni = (method === 1);  // 1=uni, 0=omni → wait, check original: currentMethod=1 means...
+
+        // Re-checking: in mf_manager, currentMethod = 1 corresponds to "单向" (uni) button index 0
+        // and currentMethod = 0 corresponds to "全向" (omni) button index 1
+        // Actually looking at the original code:
+        // function setMethod(method) { currentMethod = !method; }
+        // Radio: 单向 index 0 calls setMethod(0) → currentMethod = !0 = 1
+        // Radio: 全向 index 1 calls setMethod(1) → currentMethod = !1 = 0
+        // And the data published: method: currentMethod
+        // So currentMethod = 1 → uni, currentMethod = 0 → omni
+        // In path_editor we read: method = editorData.method, default 1
+        const isUni = (method === 1);
+
+        let prevX = null, prevY = null, prevZ = null;
+        let node = getChainHead();
+        while (node) {
+            const fromX = (prevX !== null) ? prevX : node.x;
+            const fromY = (prevY !== null) ? prevY : node.y;
+
+            // move
+            let z = getHeight(node.x, node.y);
+            let yaw;
+            if (isUni) {
+                yaw = calcYaw(fromX, fromY, node.x, node.y);
+            } else {
+                yaw = 0;
+            }
+            seq.push([0, node.x, node.y, z, parseFloat(yaw.toFixed(4)), 0, 0, 0]);
+            const moveZ = z;
+
+            // fetch 子节点
+            (node.fetchIds || []).forEach(fid => {
+                const f = getFetchNodeById(fid);
+                if (!f) return;
+                const fz = getHeight(f.x, f.y);
+                const dh = fz - moveZ;
+                const fyaw = calcYaw(node.x, node.y, f.x, f.y);
+                seq.push([1, f.x, f.y, dh, parseFloat(fyaw.toFixed(4)), 0, 0, 0]);
+            });
+
+            prevX = node.x;
+            prevY = node.y;
+            prevZ = moveZ;
+            node = node.nextId ? getMoveNodeById(node.nextId) : null;
+        }
+        return seq;
+    }
+
+    function renderPathViewer() {
+        const el = document.getElementById('path-viewer-scroll');
+        if (!el) return;
+        const seq = buildActionSequence();
+        if (seq.length === 0) { el.innerHTML = ''; return; }
+        let html = '';
+        seq.forEach((step, i) => {
+            const action = step[0] === 0 ? 'move' : 'fetch';
+            const x = step[1], y = step[2];
+            const val3 = step[3];
+            const yaw = step[4];
+            const label = action === 'move'
+                ? 'z=' + val3
+                : 'Δh=' + (val3 >= 0 ? '+' : '') + val3;
+            html += '<div class="pv-step">';
+            html += '<span class="pv-idx">#' + (i + 1) + '</span>';
+            html += '<span class="pv-tag ' + action + '">' + action + '</span>';
+            html += '<span class="pv-coords">(' + x + ', ' + y + ')</span>';
+            html += '<span class="pv-extra">' + label + ' yaw=' + yaw.toFixed(2) + '</span>';
+            html += '</div>';
+        });
+        el.innerHTML = html;
+    }
+
+    // 工具状态
+    let toolState = {
+        activeTool: null,
+        isDragging: false,
+        dragOriginX: 0, dragOriginY: 0,
+        dragStartX: 0, dragStartY: 0,
+        dragStartNodeId: null,
+        dragChain: [],
+        dragPhase: 'dwelling',   // 'dwelling' | 'left'
+        highlightCells: [],
+        cursorPx: 0, cursorPy: 0,
+        undonePos: null,
+        hasLeftUndone: true,
+        dragStartWasExisting: false,
+        fetchDeleteTargetId: null, // 抓取撤销模式：要删除的 fetch 节点 id
+        middlePrevNodeId: null,
+        middleNextNodeId: null,
+    };
+
+    // ============================================================
+    //  工具函数
+    // ============================================================
+    function rowColOf(x, y) { return { row: 5 - x, col: 2 - y }; }
+    function xyOf(row, col) { return { x: 5 - row, y: 2 - col }; }
+
+    /** 检查网格格是否可通行（假 KFS 不可达；入口 exit x=0/5 均可通行） */
+    function isBlocked(x, y) {
+        if (x < 0 || x > 5 || y < 0 || y > 2) return true;
+        const { row, col } = rowColOf(x, y);
+        if (row < 0 || row > 5 || col < 0 || col > 2) return true;
+        return kfsGrid[row][col] === 3;             // 仅假 KFS 不可达
+    }
+
+    /** 仅检查是否为假 KFS（允许空白行） */
+    function isFakeKFS(x, y) {
+        if (x < 0 || x > 5 || y < 0 || y > 2) return true;
+        const { row, col } = rowColOf(x, y);
+        if (row < 0 || row > 5 || col < 0 || col > 2) return true;
+        return kfsGrid[row][col] === 3;
+    }
+
+    /** 检查是否入口区（x=0 且非假KFS） */
+    function isEntryZone(x, y) {
+        return x === 0 && !isFakeKFS(x, y);
+    }
+
+    /** 获取相邻可达位置（左/前/右，不含后） */
+    function getReachableAdjacent(x, y) {
+        const candidates = [
+            { x,     y: y-1, dir: 'left'  },
+            { x: x+1, y,     dir: 'front' },
+            { x,     y: y+1, dir: 'right' },
+        ];
+        return candidates.filter(p => !isBlocked(p.x, p.y));
+    }
+
+    // ---- 像素坐标转换 ----
+    function gridToPixel(gx, gy) {
+        const col = 2 - gy, row = 5 - gx;
+        return {
+            px: CELL_PAD + col * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2,
+            py: CELL_PAD + row * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2,
+        };
+    }
+
+    function pixelToGrid(px, py) {
+        const col = Math.round((px - CELL_PAD - CELL_SIZE / 2) / (CELL_SIZE + CELL_GAP));
+        const row = Math.round((py - CELL_PAD - CELL_SIZE / 2) / (CELL_SIZE + CELL_GAP));
+        const c = Math.max(0, Math.min(2, col));
+        const r = Math.max(0, Math.min(5, row));
+        return xyOf(r, c);
+    }
+
+    // ============================================================
+    //  路径数据操作
+    // ============================================================
+    function getMoveNodeById(id) {
+        return editorPath.moveNodes.find(n => n.id === id) || null;
+    }
+    function getFetchNodeById(id) {
+        return editorPath.fetchNodes.find(n => n.id === id) || null;
+    }
+    function getNodeById(id) {
+        return getMoveNodeById(id) || getFetchNodeById(id);
+    }
+
+    /** 在 (x,y) 查找 move 节点 */
+    function findMoveAt(x, y) {
+        return editorPath.moveNodes.find(n => n.x === x && n.y === y) || null;
+    }
+    /** 在 (x,y) 查找 fetch 节点 */
+    function findFetchAt(x, y) {
+        return editorPath.fetchNodes.find(n => n.x === x && n.y === y) || null;
+    }
+
+    /** 节点连接数（仅计 move 连接） */
+    function moveConnectionCount(node) {
+        let n = 0;
+        if (node.prevId !== null && node.prevId !== undefined) n++;
+        if (node.nextId !== null && node.nextId !== undefined) n++;
+        return n;
+    }
+    function isEndpoint(node) { return moveConnectionCount(node) <= 1; }
+    function isMiddle(node)   { return moveConnectionCount(node) === 2; }
+
+    /** 获取 move 链首节点 */
+    function getChainHead() {
+        if (editorPath.moveNodes.length === 0) return null;
+        let node = editorPath.moveNodes[0];
+        while (node.prevId !== null && node.prevId !== undefined) {
+            const prev = getMoveNodeById(node.prevId);
+            if (!prev) break;
+            node = prev;
+        }
+        return node;
+    }
+
+    /** 获取 move 链尾节点 */
+    function getChainTail() {
+        let node = getChainHead();
+        if (!node) return null;
+        while (node.nextId !== null && node.nextId !== undefined) {
+            const next = getMoveNodeById(node.nextId);
+            if (!next) break;
+            node = next;
+        }
+        return node;
+    }
+
+    /** 获取节点的前一/后一 move */
+    function getPrevMove(node) { return node.prevId ? getMoveNodeById(node.prevId) : null; }
+    function getNextMove(node) { return node.nextId ? getMoveNodeById(node.nextId) : null; }
+
+    /** 添加 move 节点 */
+    function addMoveNode(x, y, prevId, nextId) {
+        const id = editorPath.nextId++;
+        const node = { id, x, y, z: 0, yaw: 0, prevId: prevId || null, nextId: nextId || null, fetchIds: [] };
+        editorPath.moveNodes.push(node);
+        if (prevId) { const p = getMoveNodeById(prevId); if (p) p.nextId = id; }
+        if (nextId) { const n = getMoveNodeById(nextId); if (n) n.prevId = id; }
+        return node;
+    }
+
+    /** 删除 move 节点（含其 fetch 子节点） */
+    function removeMoveNode(id) {
+        const node = getMoveNodeById(id);
+        if (!node) return;
+        // 删除附着的 fetch 节点
+        (node.fetchIds || []).forEach(fid => {
+            editorPath.fetchNodes = editorPath.fetchNodes.filter(n => n.id !== fid);
+        });
+        // 重连 prev ↔ next
+        const prev = node.prevId ? getMoveNodeById(node.prevId) : null;
+        const next = node.nextId ? getMoveNodeById(node.nextId) : null;
+        if (prev) prev.nextId = node.nextId || null;
+        if (next) next.prevId = node.prevId || null;
+        // 删除自身
+        editorPath.moveNodes = editorPath.moveNodes.filter(n => n.id !== id);
+    }
+
+    /** 添加 fetch 节点 */
+    function addFetchNode(x, y, parentMoveId) {
+        const id = editorPath.nextId++;
+        const node = { id, x, y, z: 0, yaw: 0, parentMoveId };
+        editorPath.fetchNodes.push(node);
+        const parent = getMoveNodeById(parentMoveId);
+        if (parent) {
+            if (!parent.fetchIds) parent.fetchIds = [];
+            parent.fetchIds.push(id);
+        }
+        return node;
+    }
+
+    /** 删除 fetch 节点 */
+    function removeFetchNode(id) {
+        const node = getFetchNodeById(id);
+        if (!node) return;
+        const parent = getMoveNodeById(node.parentMoveId);
+        if (parent && parent.fetchIds) {
+            parent.fetchIds = parent.fetchIds.filter(fid => fid !== id);
+        }
+        editorPath.fetchNodes = editorPath.fetchNodes.filter(n => n.id !== id);
+    }
+
+    /** 清空路径 */
+    function clearPath() {
+        editorPath = { moveNodes: [], fetchNodes: [], nextId: 1 };
+        entryY = null;
+        deactivateAllTools();
+        redrawAll();
+    }
+
+    /** 将 editorPath 转回 detail 数组 */
+    function pathToDetail() {
+        const detail = [];
+        let node = getChainHead();
+        while (node) {
+            detail.push([0, node.x, node.y, node.z || 0, node.yaw || 0, 0, 0, 0]);
+            (node.fetchIds || []).forEach(fid => {
+                const f = getFetchNodeById(fid);
+                if (f) detail.push([1, f.x, f.y, f.z || 0, f.yaw || 0, 0, 0, 0]);
+            });
+            node = node.nextId ? getMoveNodeById(node.nextId) : null;
+        }
+        return detail;
+    }
+
+    /** 从 detail 数组构建 editorPath */
+    function detailToPath(detail) {
+        editorPath = { moveNodes: [], fetchNodes: [], nextId: 1 };
+        entryY = null;
+        if (!detail || detail.length === 0) return;
+
+        let lastMoveId = null;
+        detail.forEach(step => {
+            const action = step[0], x = Math.round(step[1]), y = Math.round(step[2]);
+            const z = step[3] || 0, yaw = step[4] || 0;
+            if (action === 0) {
+                const id = editorPath.nextId++;
+                const node = { id, x, y, z, yaw, prevId: lastMoveId, nextId: null, fetchIds: [] };
+                editorPath.moveNodes.push(node);
+                if (lastMoveId) {
+                    const prev = getMoveNodeById(lastMoveId);
+                    if (prev) prev.nextId = id;
+                }
+                lastMoveId = id;
+                // 首步在 x=0 → 记录 entry
+                if (entryY === null && x === 0) entryY = y;
+            } else {
+                const id = editorPath.nextId++;
+                const node = { id, x, y, z, yaw, parentMoveId: lastMoveId };
+                editorPath.fetchNodes.push(node);
+                if (lastMoveId) {
+                    const parent = getMoveNodeById(lastMoveId);
+                    if (parent) {
+                        if (!parent.fetchIds) parent.fetchIds = [];
+                        parent.fetchIds.push(id);
+                    }
+                }
+            }
+        });
+
+        // 推测入口 y
+        const head = getChainHead();
+        if (head) entryY = head.y;
+    }
+
+    // ============================================================
+    //  渲染
+    // ============================================================
+    function getCanvasCtx() {
+        const canvas = document.getElementById('path-overlay');
+        const gridEl = document.getElementById('grid');
+        if (!canvas || !gridEl) return null;
+        canvas.width  = gridEl.offsetWidth;
+        canvas.height = gridEl.offsetHeight;
+        canvas.style.width  = gridEl.offsetWidth + 'px';
+        canvas.style.height = gridEl.offsetHeight + 'px';
+        return canvas.getContext('2d');
+    }
+
+    function redrawAll() {
+        const ctx = getCanvasCtx();
+        if (!ctx) return;
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        drawMoveLines(ctx);
+        drawFetchLines(ctx);
+        drawMoveDots(ctx);
+        drawFetchDots(ctx);
+        drawHighlights(ctx);
+        drawPreview(ctx);
+        renderPathViewer();
+        updatePublishBtn();
+    }
+
+    // ---- 各绘制层（从底到顶） ----
+
+    function drawMoveLines(ctx) {
+        const drawn = new Set();
+        editorPath.moveNodes.forEach(node => {
+            if (node.nextId) {
+                const next = getMoveNodeById(node.nextId);
+                if (!next) return;
+                const a = gridToPixel(node.x, node.y);
+                const b = gridToPixel(next.x, next.y);
+                ctx.beginPath();
+                ctx.setLineDash([]);
+                ctx.strokeStyle = '#2E7D32';
+                ctx.lineWidth = 3;
+                ctx.moveTo(a.px, a.py);
+                ctx.lineTo(b.px, b.py);
+                ctx.stroke();
+            }
+        });
+
+    }
+
+    function drawFetchLines(ctx) {
+        editorPath.fetchNodes.forEach(fnode => {
+            const parent = getMoveNodeById(fnode.parentMoveId);
+            if (!parent) return;
+            const a = gridToPixel(parent.x, parent.y);
+            const b = gridToPixel(fnode.x, fnode.y);
+            ctx.beginPath();
+            ctx.setLineDash([4, 3]);
+            ctx.strokeStyle = '#F9A825';
+            ctx.lineWidth = 1.5;
+            ctx.moveTo(a.px, a.py);
+            ctx.lineTo(b.px, b.py);
+            ctx.stroke();
+        });
+        ctx.setLineDash([]);
+    }
+
+    function drawMoveDots(ctx) {
+        editorPath.moveNodes.forEach(node => {
+            const p = gridToPixel(node.x, node.y);
+            ctx.beginPath();
+            ctx.setLineDash([]);
+            ctx.arc(p.px, p.py, 7, 0, 2 * Math.PI);
+            ctx.fillStyle = '#2E7D32';
+            ctx.fill();
+        });
+    }
+
+    function drawFetchDots(ctx) {
+        editorPath.fetchNodes.forEach(fnode => {
+            const p = gridToPixel(fnode.x, fnode.y);
+            ctx.beginPath();
+            ctx.setLineDash([]);
+            ctx.arc(p.px, p.py, 5, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#F9A825';
+            ctx.lineWidth = 1.8;
+            ctx.stroke();
+        });
+    }
+
+    function drawHighlights(ctx) {
+        // 绘制起始位置的命中范围（拖拽中）
+        if (toolState.isDragging) {
+            const sp = gridToPixel(toolState.dragStartX, toolState.dragStartY);
+            ctx.beginPath();
+            ctx.arc(sp.px, sp.py, HIT_RADIUS, 0, 2 * Math.PI);
+            ctx.fillStyle = 'rgba(100,100,255,0.12)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(100,100,255,0.5)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([3, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        if (!toolState.activeTool || toolState.highlightCells.length === 0) return;
+        const isMove = toolState.activeTool === 'move';
+        const fillColor = isMove ? 'rgba(46,125,50,0.2)' : 'rgba(249,168,37,0.2)';
+        const strokeColor = isMove ? 'rgba(46,125,50,0.55)' : 'rgba(249,168,37,0.55)';
+        toolState.highlightCells.forEach(({x, y}) => {
+            const p = gridToPixel(x, y);
+            ctx.beginPath();
+            ctx.arc(p.px, p.py, HIT_RADIUS, 0, 2 * Math.PI);
+            ctx.fillStyle = fillColor;
+            ctx.fill();
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 3]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        });
+    }
+
+    function drawPreview(ctx) {
+        if (!toolState.isDragging) return;
+        const { activeTool, dragStartX, dragStartY, cursorPx, cursorPy,
+                middlePrevNodeId, middleNextNodeId } = toolState;
+
+        if (activeTool === 'move' && middlePrevNodeId !== null) {
+            // 中间节点拖拽：画 prev→cursor 和 cursor→next
+            const prev = getMoveNodeById(middlePrevNodeId);
+            const next = getMoveNodeById(middleNextNodeId);
+            if (prev) {
+                const pp = gridToPixel(prev.x, prev.y);
+                ctx.beginPath();
+                ctx.setLineDash([6, 4]);
+                ctx.strokeStyle = '#2E7D32';
+                ctx.lineWidth = 2.5;
+                ctx.moveTo(pp.px, pp.py);
+                ctx.lineTo(cursorPx, cursorPy);
+                ctx.stroke();
+            }
+            if (next) {
+                const np = gridToPixel(next.x, next.y);
+                ctx.beginPath();
+                ctx.setLineDash([6, 4]);
+                ctx.strokeStyle = '#2E7D32';
+                ctx.lineWidth = 2.5;
+                ctx.moveTo(cursorPx, cursorPy);
+                ctx.lineTo(np.px, np.py);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+        } else if (activeTool === 'move') {
+            // 端点拖拽：画 start→cursor
+            const sp = gridToPixel(dragStartX, dragStartY);
+            ctx.beginPath();
+            ctx.setLineDash([6, 4]);
+            ctx.strokeStyle = '#2E7D32';
+            ctx.lineWidth = 2.5;
+            ctx.moveTo(sp.px, sp.py);
+            ctx.lineTo(cursorPx, cursorPy);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        } else if (activeTool === 'fetch') {
+            // 抓取拖拽：画 start→cursor
+            const sp = gridToPixel(dragStartX, dragStartY);
+            ctx.beginPath();
+            ctx.setLineDash([3, 3]);
+            ctx.strokeStyle = '#F9A825';
+            ctx.lineWidth = 2;
+            ctx.moveTo(sp.px, sp.py);
+            ctx.lineTo(cursorPx, cursorPy);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+    }
+
+    // ============================================================
+    //  工具管理
+    // ============================================================
+    function activateTool(tool) {
+        if (toolState.isDragging) return; // 拖拽中不能切换
+
+        if (toolState.activeTool === tool) {
+            deactivateAllTools();
+            return;
+        }
+
+        deactivateAllTools();
+        toolState.activeTool = tool;
+        toolState.highlightCells = [];
+        toolState.middlePrevNodeId = null;
+        toolState.middleNextNodeId = null;
+        document.getElementById(tool + '-btn').classList.add('active');
+        redrawAll();
+    }
+
+    function endDrag() {
+        toolState.isDragging = false;
+        toolState.dragPhase = 'dwelling';
+        toolState.undonePos = null;
+        toolState.hasLeftUndone = true;
+        toolState.dragStartWasExisting = false;
+        toolState.fetchDeleteTargetId = null;
+        toolState.highlightCells = [];
+        toolState.dragChain = [];
+        toolState.middlePrevNodeId = null;
+        toolState.middleNextNodeId = null;
+    }
+
+    function deactivateAllTools() {
+        toolState.activeTool = null;
+        endDrag();
+        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+        redrawAll();
+    }
+
+    // ============================================================
+    //  鼠标交互
+    // ============================================================
+    function getCanvasPos(e) {
+        const canvas = document.getElementById('path-overlay');
+        const rect = canvas.getBoundingClientRect();
+        return { px: e.clientX - rect.left, py: e.clientY - rect.top };
+    }
+
+    function onMouseDown(e) {
+        if (!toolState.activeTool) return;
+        if (toolState.isDragging) return;
+        if (e.button !== 0) return; // 仅左键
+
+        const pos = getCanvasPos(e);
+        const g = pixelToGrid(pos.px, pos.py);
+
+        if (toolState.activeTool === 'move') {
+            startMoveDrag(g.x, g.y, pos.px, pos.py);
+        } else if (toolState.activeTool === 'fetch') {
+            startFetchDrag(g.x, g.y, pos.px, pos.py);
+        }
+    }
+
+    function onMouseMove(e) {
+        const pos = getCanvasPos(e);
+        const g = pixelToGrid(pos.px, pos.py);
+        toolState.cursorPx = pos.px;
+        toolState.cursorPy = pos.py;
+
+        if (!toolState.isDragging) { updateDebug(); return; }
+
+        if (toolState.activeTool === 'move') {
+            updateMoveDrag(g.x, g.y);
+        } else if (toolState.activeTool === 'fetch') {
+            updateFetchDrag(g.x, g.y);
+        }
+        redrawAll();
+        updateDebug();
+    }
+
+    function onMouseUp(e) {
+        if (!toolState.isDragging) return;
+        endDrag();
+        redrawAll();
+    }
+
+    // ---- 移动工具拖拽 ----
+
+    function startMoveDrag(gx, gy, px, py) {
+        toolState.cursorPx = px;
+        toolState.cursorPy = py;
+        toolState.dragChain = [];
+        toolState.dragPhase = 'dwelling';
+        toolState.undonePos = null;
+        toolState.hasLeftUndone = true;
+        toolState.dragStartWasExisting = false;
+        toolState.middlePrevNodeId = null;
+        toolState.middleNextNodeId = null;
+
+        // 1) 检查是否点击了某个已有 move 节点
+        const clickedMove = findMoveAt(gx, gy);
+        if (clickedMove) {
+            if (isMiddle(clickedMove)) {
+                // 中间节点拖拽
+                const prev = getPrevMove(clickedMove);
+                const next = getNextMove(clickedMove);
+                if (!prev || !next) return;
+                toolState.isDragging = true;
+                toolState.dragOriginX = gx;
+                toolState.dragOriginY = gy;
+                toolState.dragStartX = gx;
+                toolState.dragStartY = gy;
+                toolState.dragStartNodeId = clickedMove.id;
+                toolState.middlePrevNodeId = prev.id;
+                toolState.middleNextNodeId = next.id;
+                toolState.highlightCells = computeCommonPositions(prev, next)
+                    .filter(h => !(h.x === clickedMove.x && h.y === clickedMove.y));
+            } else if (clickedMove.nextId === null || clickedMove.nextId === undefined) {
+                // 端点拖拽（仅 tail 可延伸；head 连 entry 不可回拖）
+                toolState.isDragging = true;
+                toolState.dragStartWasExisting = true;  // 已有节点 → 允许撤销回前驱
+                toolState.dragOriginX = gx;
+                toolState.dragOriginY = gy;
+                toolState.dragStartX = gx;
+                toolState.dragStartY = gy;
+                toolState.dragStartNodeId = clickedMove.id;
+                toolState.dragChain = [{x: gx, y: gy}];
+                toolState.highlightCells = getReachableAdjacent(gx, gy);
+            }
+            redrawAll();
+            return;
+        }
+
+        // 2) 检查是否点击了 entry 区
+        if (isEntryZone(gx, gy)) {
+            // 若该 entry 位置已有节点，不重复创建
+            if (findMoveAt(0, gy)) return;
+            // 创建 entry move 节点
+            const entryNode = addMoveNode(0, gy, null, null);
+            entryY = gy;
+            toolState.isDragging = true;
+            toolState.dragStartWasExisting = false;
+            toolState.dragOriginX = 0;
+            toolState.dragOriginY = gy;
+            toolState.dragStartX = 0;
+            toolState.dragStartY = gy;
+            toolState.dragStartNodeId = entryNode.id;
+            toolState.dragChain = [{x: 0, y: gy}];
+            toolState.highlightCells = getReachableAdjacent(0, gy);
+            redrawAll();
+            return;
+        }
+
+        // 3) 非 entry 且非已有 move 节点 → 不操作
+    }
+
+    function updateMoveDrag(gx, gy) {
+        const { dragStartX, dragStartY, dragChain, highlightCells,
+                middlePrevNodeId, middleNextNodeId,
+                dragPhase, cursorPx, cursorPy, undonePos, hasLeftUndone } = toolState;
+        const cp = { px: cursorPx, py: cursorPy };
+
+        // ---- 中间节点拖拽 ----
+        if (middlePrevNodeId !== null) {
+            const hit = highlightCells.find(h => {
+                const p = gridToPixel(h.x, h.y);
+                return Math.hypot(p.px - cp.px, p.py - cp.py) <= HIT_RADIUS;
+            });
+            if (hit && !findMoveAt(hit.x, hit.y)) {
+                const midNode = getMoveNodeById(toolState.dragStartNodeId);
+                if (midNode) { midNode.x = hit.x; midNode.y = hit.y; }
+                toolState.isDragging = false;
+                toolState.highlightCells = [];
+                toolState.middlePrevNodeId = null;
+                toolState.middleNextNodeId = null;
+                toolState.dragChain = [];
+            }
+            return;
+        }
+
+        // ---- 端点拖拽 ----
+
+        const sp = gridToPixel(dragStartX, dragStartY);
+        const distFromStart = Math.hypot(sp.px - cp.px, sp.py - cp.py);
+
+        // ★ 更新 hasLeftUndone —— 光标是否已离开刚撤销的位置
+        if (undonePos && !hasLeftUndone) {
+            const up = gridToPixel(undonePos.x, undonePos.y);
+            if (Math.hypot(up.px - cp.px, up.py - cp.py) > HIT_RADIUS) {
+                console.log('[DEBUG] hasLeftUndone → true (离开锁定位)');
+                toolState.hasLeftUndone = true;
+            }
+        }
+
+        // ★ 撤销：离开当前起点半径后重新进入 → 回退前一步
+        if (dragPhase === 'left' && distFromStart <= HIT_RADIUS) {
+            const canUndo = dragChain.length >= 2 || toolState.dragStartWasExisting;
+            if (canUndo) {
+                console.log('[UNDO] 撤销！chain=' + dragChain.length + ' existing=' + toolState.dragStartWasExisting);
+
+                let removedPos, newStartX, newStartY, newStartNodeId, newWasExisting;
+
+                if (dragChain.length >= 2) {
+                    // 本次拖拽创建的节点 → 弹出并删除
+                    removedPos = dragChain.pop();
+                    const nodeToRemove = findMoveAt(removedPos.x, removedPos.y);
+                    if (nodeToRemove) removeMoveNode(nodeToRemove.id);
+                    // 新起点 = dragChain 新末尾
+                    const nl = dragChain[dragChain.length - 1];
+                    newStartX = nl.x; newStartY = nl.y;
+                    newStartNodeId = findMoveAt(nl.x, nl.y)?.id || null;
+                    newWasExisting = toolState.dragStartWasExisting; // 保持原标记
+                } else {
+                    // 已有节点 → 先记下前驱，再删节点
+                    const doomed = getMoveNodeById(toolState.dragStartNodeId);
+                    removedPos = doomed ? { x: doomed.x, y: doomed.y } : { x: toolState.dragStartX, y: toolState.dragStartY };
+                    const pred = doomed ? getPrevMove(doomed) : null;
+                    if (doomed) removeMoveNode(doomed.id);
+                    dragChain.pop(); // 此时 dragChain 变空
+
+                    if (pred) {
+                        newStartX = pred.x; newStartY = pred.y;
+                        newStartNodeId = pred.id;
+                        newWasExisting = true;
+                        dragChain.push({ x: pred.x, y: pred.y });
+                    } else {
+                        // 前驱为空 → 已删到 entry，结束拖拽
+                        entryY = toolState.dragOriginY;
+                        endDrag();
+                        redrawAll();
+                        return;
+                    }
+                }
+
+                toolState.undonePos = { x: removedPos.x, y: removedPos.y };
+                toolState.hasLeftUndone = false;
+                toolState.dragStartX = newStartX;
+                toolState.dragStartY = newStartY;
+                toolState.dragStartNodeId = newStartNodeId;
+                toolState.dragStartWasExisting = newWasExisting;
+                toolState.highlightCells = getReachableAdjacent(newStartX, newStartY)
+                    .filter(h => !findMoveAt(h.x, h.y));
+                toolState.dragPhase = 'dwelling';
+                return;
+            }
+        }
+
+        // ★ 更新 dragPhase：dwelling ↔ left 双向
+        if (dragPhase === 'dwelling' && distFromStart > HIT_RADIUS) {
+            console.log('[PHASE] dwelling → left  dist=' + Math.round(distFromStart) + ' > ' + HIT_RADIUS);
+            toolState.dragPhase = 'left';
+        } else if (dragPhase === 'left' && distFromStart <= HIT_RADIUS) {
+            console.log('[PHASE] left → dwelling  dist=' + Math.round(distFromStart) + ' <= ' + HIT_RADIUS + ' chain=' + dragChain.length);
+            toolState.dragPhase = 'dwelling';
+        }
+
+        // ★ 推进：dragPhase='left' 时命中高亮格 → 创建新节点
+        if (dragPhase === 'left') {
+            const hit = highlightCells.find(h => {
+                const p = gridToPixel(h.x, h.y);
+                return Math.hypot(p.px - cp.px, p.py - cp.py) <= HIT_RADIUS;
+            });
+            if (hit && !findMoveAt(hit.x, hit.y)) {
+                // 若命中刚撤销的位置，必须离开过才能重新推进
+                if (undonePos && hit.x === undonePos.x && hit.y === undonePos.y && !hasLeftUndone) {
+                    console.log('[BLOCK] 推进被拦截 hit=(' + hit.x + ',' + hit.y + ') 未离开锁定位');
+                    return;
+                }
+                const prevNodeId = toolState.dragStartNodeId;
+                const newNode = addMoveNode(hit.x, hit.y, prevNodeId, null);
+                if (prevNodeId !== null) {
+                    const prevNode = getMoveNodeById(prevNodeId);
+                    if (prevNode) prevNode.nextId = newNode.id;
+                }
+                toolState.dragStartX = hit.x;
+                toolState.dragStartY = hit.y;
+                toolState.dragStartNodeId = newNode.id;
+                toolState.dragChain.push({x: hit.x, y: hit.y});
+                toolState.highlightCells = getReachableAdjacent(hit.x, hit.y)
+                    .filter(h => !findMoveAt(h.x, h.y));
+                toolState.dragPhase = 'dwelling';
+                console.log('[ADVANCE] 推进到 (' + hit.x + ',' + hit.y + ') chain=' + toolState.dragChain.length);
+                // 推进后清除 undonePos —— 新路径建立，旧撤销标记失效
+                toolState.undonePos = null;
+                toolState.hasLeftUndone = true;
+            }
+        }
+    }
+
+    /** 计算中间节点的公共可达位置 */
+    function computeCommonPositions(prev, next) {
+        // prev 的后继: (prev.x+1, prev.y), (prev.x, prev.y-1), (prev.x, prev.y+1)
+        const prevSucc = [
+            {x: prev.x+1, y: prev.y},
+            {x: prev.x,   y: prev.y-1},
+            {x: prev.x,   y: prev.y+1},
+        ].filter(p => !isBlocked(p.x, p.y));
+
+        // next 的前置: (next.x-1, next.y), (next.x, next.y-1), (next.x, next.y+1)
+        const nextPred = [
+            {x: next.x-1, y: next.y},
+            {x: next.x,   y: next.y-1},
+            {x: next.x,   y: next.y+1},
+        ].filter(p => !isBlocked(p.x, p.y));
+
+        // 交集
+        return prevSucc.filter(ps =>
+            nextPred.some(np => np.x === ps.x && np.y === ps.y)
+        );
+    }
+
+    // ---- 抓取工具拖拽 ----
+
+    function startFetchDrag(gx, gy, px, py) {
+        toolState.cursorPx = px;
+        toolState.cursorPy = py;
+        toolState.dragChain = [];
+        toolState.dragPhase = 'dwelling';
+        toolState.undonePos = null;
+        toolState.hasLeftUndone = true;
+        toolState.fetchDeleteTargetId = null;
+        toolState.middlePrevNodeId = null;
+        toolState.middleNextNodeId = null;
+
+        // ★ 若点击在已有 fetch 节点上 → 进入删除模式
+        const clickedFetch = findFetchAt(gx, gy);
+        if (clickedFetch) {
+            toolState.isDragging = true;
+            toolState.dragStartX = clickedFetch.x;
+            toolState.dragStartY = clickedFetch.y;
+            toolState.dragStartNodeId = clickedFetch.parentMoveId;
+            toolState.fetchDeleteTargetId = clickedFetch.id;
+            toolState.highlightCells = []; // 无需高亮
+            redrawAll();
+            return;
+        }
+
+        // 起点必须是绿色 move 节点
+        const moveNode = findMoveAt(gx, gy);
+        if (!moveNode) return;
+
+        toolState.isDragging = true;
+        toolState.dragStartX = moveNode.x;
+        toolState.dragStartY = moveNode.y;
+        toolState.dragStartNodeId = moveNode.id;
+        toolState.highlightCells = getReachableAdjacent(moveNode.x, moveNode.y).filter(h => {
+            // 仅过滤假KFS（已在 getReachableAdjacent 中处理）和已有 fetch 的位置
+            return !findFetchAt(h.x, h.y);
+        });
+        redrawAll();
+    }
+
+    function updateFetchDrag(gx, gy) {
+        const { highlightCells, dragStartNodeId, fetchDeleteTargetId,
+                dragStartX, dragStartY, cursorPx, cursorPy } = toolState;
+        const cp = { px: cursorPx, py: cursorPy };
+
+        // ★ 删除模式：离开 fetch 节点半径即删除
+        if (fetchDeleteTargetId !== null) {
+            const sp = gridToPixel(dragStartX, dragStartY);
+            if (Math.hypot(sp.px - cp.px, sp.py - cp.py) > HIT_RADIUS) {
+                removeFetchNode(fetchDeleteTargetId);
+                endDrag();
+                redrawAll();
+            }
+            return;
+        }
+
+        // 创建模式
+        const hit = highlightCells.find(h => {
+            const p = gridToPixel(h.x, h.y);
+            return Math.hypot(p.px - cp.px, p.py - cp.py) <= HIT_RADIUS;
+        });
+
+        if (hit && dragStartNodeId !== null) {
+            addFetchNode(hit.x, hit.y, dragStartNodeId);
+            toolState.isDragging = false;
+            toolState.highlightCells = [];
+            toolState.dragChain = [];
+        }
+    }
+
+    // ============================================================
+    //  网格渲染
+    // ============================================================
+    function getMarkerClass(value) {
+        switch (value) {
+            case 1: return 'kfs1';
+            case 2: return 'kfs2';
+            case 3: return 'kfs-fake';
+            default: return '';
+        }
+    }
+
+    function renderGrid() {
+        const gridEl = document.getElementById('grid');
+        gridEl.innerHTML = '';
+        for (let row = 0; row < 6; row++) {
+            for (let col = 0; col < 3; col++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.id = `cell-${row}-${col}`;
+                const { x, y } = xyOf(row, col);
+                if (row === 0 || row === 5) cell.classList.add('blank');
+                cell.textContent = `(${x}, ${y})`;
+                const v = kfsGrid[row][col];
+                if (v !== 0 && row !== 0 && row !== 5) cell.classList.add(getMarkerClass(v));
+                gridEl.appendChild(cell);
+            }
+        }
+    }
+
+    // ============================================================
+    //  队伍 & 底盘
+    // ============================================================
+    function applyTeamDisplay(t) {
+        document.body.className = 'team-' + t;
+        document.querySelectorAll('#team-group .radio-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.value === t);
+        });
+    }
+    function applyMethodDisplay(m) {
+        const idx = m ? 0 : 1;
+        document.querySelectorAll('#method-group .radio-btn').forEach((b, i) => {
+            b.classList.toggle('active', i === idx);
+        });
+    }
+
+    // ============================================================
+    //  返回
+    // ============================================================
+    // ============================================================
+    //  debug
+    // ============================================================
+    function updateDebug() {
+        const el = document.getElementById('debug-bar');
+        if (!el) return;
+        const s = toolState;
+        const sp = s.isDragging ? gridToPixel(s.dragStartX, s.dragStartY) : {px:0,py:0};
+        const dist = s.isDragging
+            ? Math.round(Math.hypot(sp.px - s.cursorPx, sp.py - s.cursorPy))
+            : 0;
+        el.innerHTML =
+            'phase:<b>' + s.dragPhase + '</b> ' +
+            'drag:' + (s.isDragging ? 'Y' : 'N') + ' ' +
+            'tool:' + (s.activeTool || '-') + ' ' +
+            'chain:' + s.dragChain.length + ' ' +
+            'dist:' + dist + 'px ' +
+            'start:(' + s.dragStartX + ',' + s.dragStartY + ') ' +
+            'cursor:(' + Math.round(s.cursorPx) + ',' + Math.round(s.cursorPy) + ')' +
+            (s.undonePos ? ' lock:(' + s.undonePos.x + ',' + s.undonePos.y + '):' + (s.hasLeftUndone ? 'free' : 'LOCKED') : '');
+    }
+
+    // ============================================================
+    //  ROS 连接 & 发布
+    // ============================================================
+    const rosStatusEl = document.getElementById('ros-status');
+    let rosConnected = false;
+    const ros = new ROSLIB.Ros({ url: 'ws://localhost:9090' });
+
+    ros.on('error', () => {
+        rosConnected = false;
+        rosStatusEl.textContent = 'ROS: 错误';
+        rosStatusEl.style.color = '#e53935';
+        updatePublishBtn();
+    });
+    ros.on('close', () => {
+        rosConnected = false;
+        rosStatusEl.textContent = 'ROS: 断开';
+        rosStatusEl.style.color = '#aaa';
+        updatePublishBtn();
+    });
+    ros.on('connection', () => {
+        rosConnected = true;
+        rosStatusEl.textContent = 'ROS: 已连接';
+        rosStatusEl.style.color = '#43A047';
+        updatePublishBtn();
+    });
+
+    const actionSeqPublisher = new ROSLIB.Topic({
+        ros: ros,
+        name: '/mf_action_seq',
+        messageType: 'std_msgs/Float32MultiArray'
+    });
+
+    function updatePublishBtn() {
+        const btn = document.getElementById('publish-btn');
+        const hasPath = editorPath.moveNodes.length > 0;
+        btn.disabled = !(rosConnected && hasPath);
+    }
+
+    function publishCustomPath() {
+        if (!rosConnected) return;
+        const detail = buildActionSequence();
+        if (detail.length === 0) return;
+
+        const numSteps = detail.length;
+        const flatData = [];
+        detail.forEach(step => {
+            for (let i = 0; i < 8; i++) {
+                flatData.push(Number(step[i]) || 0);
+            }
+        });
+
+        const msg = new ROSLIB.Message({
+            layout: {
+                dim: [
+                    { label: 'step', size: numSteps, stride: 8 },
+                    { label: 'field', size: 8, stride: 1 }
+                ],
+                data_offset: 0
+            },
+            data: flatData
+        });
+        actionSeqPublisher.publish(msg);
+        rosStatusEl.textContent = '已发送 ' + numSteps + ' 步';
+        rosStatusEl.style.color = '#4CAF50';
+        setTimeout(() => {
+            if (rosConnected) {
+                rosStatusEl.textContent = 'ROS: 已连接';
+                rosStatusEl.style.color = '#43A047';
+            }
+        }, 3000);
+    }
+
+    function goBack() {
+        sessionStorage.setItem('mf_return_data', JSON.stringify({
+            grid: kfsGrid,
+            team: team,
+            method: method
+        }));
+        window.location.href = 'mf_manager.html';
+    }
+
+    // ============================================================
+    //  初始化
+    // ============================================================
+    function init() {
+        document.getElementById('page-title').textContent =
+            editorMode === 'modify' ? '路径编辑器 - 修改模式' : '路径编辑器 - 新建模式';
+
+        applyTeamDisplay(team);
+        applyMethodDisplay(method);
+        renderGrid();
+
+        // 修改模式：加载已有路径
+        if (editorMode === 'modify' && pathInfo && pathInfo.detail) {
+            detailToPath(pathInfo.detail);
+        }
+
+        // 绑定鼠标事件：mousedown 限 canvas，mousemove/mouseup 绑 document 保证边缘操作不丢失
+        const canvas = document.getElementById('path-overlay');
+        canvas.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+
+        // 初始渲染
+        setTimeout(() => redrawAll(), 100);
+    }
+
+    init();
+    </script>
+</body>
+</html>

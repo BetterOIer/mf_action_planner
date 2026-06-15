@@ -62,87 +62,62 @@ path = planner.plan_path([0, 1, 2])  # 从入口三列分别出发
 
 ### 功能
 
-单页面应用，通过 rosbridge_websocket 与 ROS2 通信。包含网格编辑器、队伍/底盘切换栏、路径浏览列表、路径可视化覆盖层、自动发送倒计时。
+单页面应用，通过 rosbridge_websocket 与 ROS2 通信。包含网格编辑器、队伍/底盘切换栏、路径浏览列表、路径可视化覆盖层、自动发送倒计时。左侧包含两个面板：工具栏（KFS1/KFS2/K假/清空/随机）和独立的发送面板。
 
-### 关键代码
+### 界面布局
 
-**ROS 连接与话题：**
-
-```javascript
-let ros = new ROSLIB.Ros({ url: 'ws://localhost:9090' });
-
-// 发布：grid + team + method
-const r2Publisher = new ROSLIB.Topic({
-    ros, name: '/mf_r2_data', messageType: 'std_msgs/String'
-});
-
-// 订阅：路径摘要
-const pathsForWebSub = new ROSLIB.Topic({
-    ros, name: '/planning/paths_for_web', messageType: 'std_msgs/String'
-});
-
-// 发布：行动序列
-const actionSeqPublisher = new ROSLIB.Topic({
-    ros, name: '/mf_action_seq', messageType: 'std_msgs/Float32MultiArray'
-});
+```
+┌──────────┐ ┌────────────────────┐ ┌────┬────┐
+│  KFS1    │ │                    │ │自定│KFS2│
+│  KFS2    │ │   3×6 布局网格      │ │义路│=0  │
+│  K假     │ │   + Canvas 叠加     │ │线  │    │
+│  清空    │ │                    │ ├────┼────┤
+│  随机    │ │  [红队/蓝队]       │ │新建│KFS2│
+└──────────┘ │  [单向/全向]       │ │修改│=1  │
+┌──────────┐ └────────────────────┘ ├────┼────┤
+│  发送    │                        │KFS2│KFS2│
+└──────────┘                        │=3  │=4  │
+                                    └────┴────┘
 ```
 
-**发布网格数据（含翻转）：**
+### 新增功能：路径编辑器入口
+
+原"自定义路线"面板替换为**新建**和**修改**两个按钮：
+
+- **新建**：将当前 KFS 布局、队伍、底盘信息通过 `sessionStorage` 传给 `path_editor.html`，从空白开始绘制
+- **修改**：在新建的基础上额外传入当前选中路径的 `detail` 数据，在已有路径上微调
+
+两个按钮在无选中路径时**修改**按钮禁用，选中路径后同时启用。从编辑器返回时自动恢复 KFS 布局、队伍和底盘设置。
+
+### 发送面板
+
+发送按钮独立为左侧下方面板，与工具栏面板保持 12px 间距。选中路径后启用，点击将路径展平为 `Float32MultiArray` 发布到 `/mf_action_seq`。
+
+### 关键代码（与原始版相同部分省略）
+
+**页面间数据传递：**
 
 ```javascript
-function publishR2Data() {
-    // 上下左右翻转，使 grid[0][0] = (0,0)
-    const flipped = grid.slice().reverse().map(row => [...row].reverse());
-    const data = { grid: flipped, team: currentTeam, method: currentMethod, ... };
-    r2Publisher.publish(new ROSLIB.Message({ data: JSON.stringify(data) }));
+function navigateToEditor(mode) {
+    sessionStorage.setItem('mf_path_editor_data', JSON.stringify({
+        grid, team: currentTeam, method: currentMethod, mode,
+        pathInfo: mode === 'modify' ? { detail, cost, steps, ... } : undefined
+    }));
+    window.location.href = 'path_editor.html';
 }
 ```
 
-调用时机：放置/清除标记、清空、随机放置、切换队伍/底盘。
-
-**路径在网格上的绘制（Canvas 覆盖层）：**
+**从编辑器返回时恢复状态：**
 
 ```javascript
-function drawPathOnGrid(detail) {
-    // 1. 绿色实线：连接所有 move 点
-    // 2. 黄色虚线：每个 fetch 连向其前面最近的 move
-    // 3. 绿色实心圆：move 端点
-    // 4. 黄色空心圆：fetch 端点（最后画，避免被同坐标 move 实心圆覆盖）
-}
+const data = JSON.parse(sessionStorage.getItem('mf_return_data'));
+if (data) { grid = data.grid; currentTeam = data.team; ... publishR2Data(); }
 ```
 
-坐标映射：网格坐标 `(x,y)` → 像素 `(px,py)`：
-```
-col = 2 - y,  row = 5 - x
-px = PAD + col * (CELL + GAP) + CELL/2
-py = PAD + row * (CELL + GAP) + CELL/2
-```
+### 其他改动
 
-**发布行动序列：**
-
-```javascript
-function publishPath(detail, cost, kfs1) {
-    // 将所有步的 8 个 float 展平
-    const flat = [];
-    detail.forEach(s => { for (let i=0; i<8; i++) flat.push(Number(s[i])); });
-
-    const msg = new ROSLIB.Message({
-        layout: {
-            dim: [{ label:'step', size:numSteps, stride:8 },
-                  { label:'field', size:8, stride:1 }],
-            data_offset: 0
-        },
-        data: flat
-    });
-    actionSeqPublisher.publish(msg);
-}
-```
-
-`layout.dim[0].size` 告知订阅者步数，每 8 个 float 为一步。
-
-**自动发送机制：**
-
-收到新路径数据 → 优先选 KFS2=2 第一条（fallback KFS2=3）→ 10 秒倒计时 → 归零自动发送。手动选路径、点取消或立即发送均可中断。
+- ROS 连接后不再自动随机摆放 KFS，网格初始为空白
+- 路径选中/取消选中联动修改按钮的启用/禁用状态
 
 ---
 
@@ -229,3 +204,148 @@ def _add_path(self, path, cost, kfs2_needed, kfs1_affected):
 - 穿透全部 4 个 KFS2 的路径无效（R2 放不下）
 - 拿到少于 2 个 KFS2 的路径不考虑
 - 经过假 KFS（值为 3）的格子时跳过
+
+---
+
+## 4. path_editor.html — 手动路径编辑器
+
+### 功能
+
+独立页面，支持通过拖拽交互手动绘制或修改机器人路径。从 `mf_manager.html` 的新建/修改按钮跳转进入。包含移动和抓取两种工具，提供实时动作序列预览和 ROS 发布能力。
+
+### 界面布局
+
+```
+┌──────┐   ┌──────────────────┐   ┌──────────────┐
+│ 移动 │   │                  │   │ 动作序列      │
+│ 抓取 │   │   3×6 网格       │   │ #1 move      │
+│ 清空 │   │   (不可编辑KFS)  │   │ (0,1) z=0    │
+└──────┘   │                  │   │   yaw=0.00   │
+┌──────┐   │  [红队/蓝队]     │   │ #2 move      │
+│ 发送 │   │  [单向/全向]     │   │ (1,1) z=400  │
+└──────┘   └──────────────────┘   │   yaw=0.00   │
+                                  │ ...          │
+                                  └──────────────┘
+```
+
+左侧双面板：上方编辑工具（移动/抓取/清空），下方发送按钮。右侧路径查看器实时显示动作序列，含每步的坐标、Z/Δh、朝向。
+
+### 两种模式
+
+| 模式 | 入口 | 初始状态 |
+|------|------|----------|
+| 新建 | mf_manager "新建"按钮 | 空白路径，从 entry 区 (x=0) 开始绘制 |
+| 修改 | mf_manager "修改"按钮 | 加载已有路径，在此基础上调整 |
+
+### 移动工具（绿色）
+
+按住并拖拽模式，模仿地铁线路图游戏的操作逻辑。
+
+**从端点延伸（0 或 1 连接）：**
+1. 按下 entry 区 `(0,n)` 或路径 tail 端点
+2. 相邻可达位置高亮（左/前/右三个方向），显示为绿色虚线命中圈
+3. 拖入高亮圈 → 路径延伸，起点更新，高亮刷新
+4. 自始至终绘制当前起点到光标的虚线预览
+
+**撤销（端点）：**
+- 离开当前起点命中圈 → `dragPhase = left`
+- 重新进入当前起点命中圈 → 撤销该步（含附着的 fetch），回退到前驱
+- 连续撤销可一路回到 entry
+
+**从中间节点调整（2 连接）：**
+1. 按下路径中间某节点
+2. 计算前驱后继 ∩ 后驱前驱的公共可达位置，高亮
+3. 拖入公共位置 → 节点坐标替换为新高亮格
+
+**可达性约束：** 假 KFS 标记格始终不可达；高亮格自动过滤已有节点避免重叠。
+
+### 抓取工具（黄色）
+
+**创建 fetch：**
+1. 按下任意绿色 move 节点
+2. 相邻可达位置高亮为黄色命中圈
+3. 拖入高亮圈 → 创建 fetch 并立即完成（无需等到松手）
+
+**删除 fetch：**
+1. 按下已有 fetch 终点
+2. 拖动离开其命中圈 → fetch 被删除
+
+**可达性约束：** 假 KFS 格不可达；同一位置不可重复创建 fetch。
+
+### 清空工具（灰色）
+
+点击清除全部自定义路径和 entry 点，恢复空白状态。
+
+### 路径数据模型
+
+```
+moveNodes: [{id, x, y, z, yaw, prevId, nextId, fetchIds[]}]
+fetchNodes: [{id, x, y, z, yaw, parentMoveId}]
+```
+
+- Move 节点组成双向链表（prevId/nextId），形成路径主干
+- Fetch 节点挂在 move 节点上（parentMoveId），为叶子
+- Entry 点作为链首 move 节点（prevId=null, x=0）存入路径
+
+### 动作序列生成 `buildActionSequence()`
+
+遍历 move 链，为每步计算实际参数：
+
+| 参数 | move | fetch |
+|------|------|-------|
+| `[0]` action | 0 | 1 |
+| `[1],[2]` (x,y) | 目标格子 | 目标格子 |
+| `[3]` z/Δh | Z = `getHeight(x,y)` | Δh = 目标高度 - 当前高度 |
+| `[4]` yaw | 全向=0，单向=`atan2(Δy,Δx)` | 始终=`atan2(Δy,Δx)` |
+
+高度数据来自红/蓝队高度数组（已做上下左右翻转对齐屏幕坐标系）。
+
+### 路径查看器
+
+右侧面板实时展示当前路径的动作序列，格式与 `mf_manager` 一致：
+- 绿色标签 `move` — 坐标 + z + yaw
+- 黄色标签 `fetch` — 坐标 + Δh + yaw
+
+路径每步变化（拖拽推进/撤销/创建 fetch 等）后自动刷新。
+
+### 发送工具
+
+点击"发送"按钮将当前自定义路径发布到 `/mf_action_seq`。发布格式与 `mf_manager` 完全一致（`Float32MultiArray` + `layout.dim`）。按钮仅在 ROS 连接且路径非空时启用。
+
+### 与 mf_manager 的数据流
+
+```
+mf_manager ──sessionStorage──→ path_editor
+  mf_path_editor_data: {grid, team, method, mode, pathInfo?}
+
+path_editor ──sessionStorage──→ mf_manager
+  mf_return_data: {grid, team, method}
+```
+
+- 进入编辑器：传入 KFS 布局（只读展示）、队伍/底盘信息（背景色）
+- 返回管理页：回传 KFS 布局、队伍/底盘信息，mf_manager 自动恢复并发布 `/mf_r2_data`
+
+### 高度数组
+
+```javascript
+// 红队（已翻转对齐屏幕坐标系）
+const HEIGHT_RED = [
+    [0,   0,   0],    // screen row 0 (x=5, 出口区)
+    [200, 400, 200],  // screen row 1 (x=4)
+    [400, 600, 400],  // screen row 2 (x=3)
+    [200, 400, 600],  // screen row 3 (x=2)
+    [400, 200, 400],  // screen row 4 (x=1)
+    [0,   0,   0],    // screen row 5 (x=0, 入口区)
+];
+// 蓝队同上，row 3 为 [600, 400, 200]
+```
+
+### 坐标映射（与 mf_manager 一致）
+
+```
+col = 2 - y,  row = 5 - x
+px = PAD + col * (CELL + GAP) + CELL/2
+py = PAD + row * (CELL + GAP) + CELL/2
+```
+
+命中半径 `HIT_RADIUS = 35px`（约 1/3 格宽），进入该圆范围即触发命中。
