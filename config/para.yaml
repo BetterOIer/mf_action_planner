@@ -1,8 +1,7 @@
 # ============================================================
-#  forest_searching — 统一参数文件（顶层 ros__parameters）
+#  dfs_planner — 参数文件（顶层 ros__parameters）
 # ============================================================
-#  所有节点共读此文件，无嵌套层级。
-#  各节点通过 declare_parameter('key') 读取。
+#  所有常量与默认值均从此文件读取。
 # ============================================================
 
 /**:
@@ -11,70 +10,22 @@
     # -------------------- 场地网格 --------------------
     grid_rows:         6
     grid_cols:         3
-    start_row:         -1
-    start_col:         1
+    # 高度图请在dfs_planner_node.py中编辑
 
-    goal_grid_0:       [3, 0]
-    goal_grid_1:       [3, 1]
-    goal_grid_2:       [3, 2]
+    # -------------------- DFS 代价权重 --------------------
+    move_cost:         2
+    turn_cost:         1
+    fetch_kfs2_cost:   4
 
-    # -------------------- Tracker 运动模式 --------------------
-    # 'omnidirectional' : 全向（可横移）
-    # 'unidirectional'  : 单向（只能前进）
-    motion_type:       'unidirectional'
-
-    # -------------------- Tracker 控制频率 --------------------
-    control_frequency: 200.0
-    arrive_threshold:  0.12      # 判定到达目标的距离阈值 (m)
-    angle_threshold:   0.05     # 判定角度对齐的阈值 (rad)
-    arrive_precise_threshold:  0.01      # 判定到达目标的距离阈值 (m)
-    angle_precise_threshold:   0.02     # 判定角度对齐的阈值 (rad)
-    reserved_length:  0.10
-    deadzone_linear_vel: 0.15      # 线速度死区阈值 (m/s)，小于此值时认为不动
-
-    # ---------- PID ----------
-    kp_angle: 2.5
-    ki_angle: 0.0
-    kd_angle: 0.2
-    max_angular:   3.0
-
-    kp_dist: 2.5
-    ki_dist: 0.0
-    kd_dist: 0.1
-    max_vel:   0.8
-
-    kp_adj_angle: 0.8
-    ki_adj_angle: 0.0
-    kd_adj_angle: 0.1
-    max_adj_angular:   1.0
-
-    kp_adj_dist: 1.2
-    ki_adj_dist: 0.0
-    kd_adj_dist: 0.1
-    max_adj_vel:   0.3
+    # -------------------- 默认值 --------------------
+    default_team:      'red'       # 红队/蓝队
+    default_method:    1           # 1=uni（单向），0=omni（全向）
+    start_y:           [0, 1, 2]   # 起始列索引
 
     # -------------------- Topics --------------------
-    mf_r2_data:           '/mf_r2_data'
-    planning_path:        '/planning/path'
-    path_on_rviz:         '/path_on_rviz'
-    can_go:               '/can_go'
-    planning_direction:   '/planning/direction'
-    planning_trigger:     '/task/trigger'
-    odom_world:           '/odin1/relocation'
-    # odom_world:         '/odom_world'
-    cmd_vel:              '/t0x0101_'
-    # cmd_vel:            '/cmd_vel'
-    tracker_direction:    '/direction'
-    target_yaw_deg:       '/target_yaw_deg'
-    suspension_state:     '/current_state'
-    suspension_state_pub:     '/target_state'
-    suspension_control:   '/t0x0102_action'
-    fetch_done:           'r0x0202'
-    initial_pose:       '/start_pose'
-    can_do:            '/t0x0103_'
+    mf_r2_data:                '/mf_r2_data'
+    planning_paths_for_web:    '/planning/paths_for_web'
 
-    # -------------------- Odom Simulator (仿真模式) ----------
-    odom_frame:    'map'
-    base_frame:    'base_link'
-    publish_rate:  50.0
-
+    # -------------------- 发布 / 日志数量限制 --------------------
+    web_pub_top_n:  10          # 每个 kfs2 bucket 发布到 Web 的最多路径数
+    log_top_n:      3           # 每个 kfs2 bucket 日志打印的最多路径数

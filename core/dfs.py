@@ -26,7 +26,8 @@ import numpy as np
 
 
 class DFSPlanner:
-    def __init__(self, grid_cols, grid_rows, grid, kfs_grid_height, kfs2_preferred, method=1, logger=None):
+    def __init__(self, grid_cols, grid_rows, grid, kfs_grid_height,
+                 method=1, logger=None, move_cost=2, turn_cost=1, fetch_kfs2_cost=4):
         self.logger = logger
         self.GRID_ROWS = grid_rows
         self.GRID_COLS = grid_cols
@@ -42,10 +43,9 @@ class DFSPlanner:
         self.cnt_path = []
         self.eval_path = []
 
-        self.MOVE_COST = 2
-        self.TURN_COST = 1
-        self.FETCH_KFS2_COST = 4
-        self.KFS2_PREFERRED = kfs2_preferred
+        self.MOVE_COST = move_cost
+        self.TURN_COST = turn_cost
+        self.FETCH_KFS2_COST = fetch_kfs2_cost
 
 
     # ------------------------------------------------------------------

@@ -4,7 +4,7 @@ DFS路径规划节点 - 简化版
 
 功能：
 - 订阅 kfs_data 话题获取网格数据
-- 收到数据后依次以 (0,0), (0,1), (0,2) 为起点规划路径并发布
+- 收到数据后依次以 start_y 中的列为起点规划路径并发布
 """
 
 import json
@@ -16,9 +16,9 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
 from std_msgs.msg import String
 from nav_msgs.msg import Path
-from geometry_msgs.msg import PoseStamped
 
 from core.dfs import DFSPlanner
+
 
 class DFSPlannerNode(Node):
     """DFS路径规划节点"""
@@ -26,14 +26,29 @@ class DFSPlannerNode(Node):
     def __init__(self):
         super().__init__('dfs_planner')
 
-        # 从参数服务器读取参数
-        self.declare_parameter('grid_rows', 4)
+        # ---- 场地网格 ----
+        self.declare_parameter('grid_rows', 6)
         self.declare_parameter('grid_cols', 3)
-
         self.GRID_ROWS = int(self.get_parameter('grid_rows').value)
         self.GRID_COLS = int(self.get_parameter('grid_cols').value)
 
-        self.kfs_grid = np.zeros((self.GRID_ROWS, self.GRID_COLS), dtype=int)
+        # ---- DFS 代价权重 ----
+        self.declare_parameter('move_cost', 2)
+        self.declare_parameter('turn_cost', 1)
+        self.declare_parameter('fetch_kfs2_cost', 4)
+        self.MOVE_COST = int(self.get_parameter('move_cost').value)
+        self.TURN_COST = int(self.get_parameter('turn_cost').value)
+        self.FETCH_KFS2_COST = int(self.get_parameter('fetch_kfs2_cost').value)
+
+        # ---- 默认值 ----
+        self.declare_parameter('default_team', 'red')
+        self.declare_parameter('default_method', 1)
+        self.declare_parameter('start_y', [0, 1, 2])
+        self.current_team = self.get_parameter('default_team').value
+        self.current_method = int(self.get_parameter('default_method').value)
+        self.start_y = self.get_parameter('start_y').value
+
+        # ---- 场地高度图（数据，不放入参数文件） ----
         self.kfs_grid_height_blue = np.array([
             [000, 000, 000],
             [400, 200, 400],
@@ -51,12 +66,18 @@ class DFSPlannerNode(Node):
             [000, 000, 000]
         ], dtype=int)
 
-        kfs_topic = self.declare_parameter('mf_r2_data', '/mf_r2_data').value
-        path_topic = self.declare_parameter('planning_path', '/planning/path').value
-        path_rviz_topic = self.declare_parameter('path_on_rviz', '/path_on_rviz').value
+        # ---- 发布/日志数量限制 ----
+        self.declare_parameter('web_pub_top_n', 10)
+        self.declare_parameter('log_top_n', 3)
+        self.WEB_PUB_TOP_N = int(self.get_parameter('web_pub_top_n').value)
+        self.LOG_TOP_N = int(self.get_parameter('log_top_n').value)
 
-        self.current_team = 'red'   # 默认红队
-        self.current_method = 1     # 默认 uni
+        # ---- Topics ----
+        kfs_topic = self.declare_parameter('mf_r2_data', '/mf_r2_data').value
+        paths_web_topic = self.declare_parameter(
+            'planning_paths_for_web', '/planning/paths_for_web').value
+
+        self.kfs_grid = np.zeros((self.GRID_ROWS, self.GRID_COLS), dtype=int)
 
         qos_profile = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
@@ -69,19 +90,9 @@ class DFSPlannerNode(Node):
             String, kfs_topic, self.kfs_data_callback, qos_profile
         )
 
-        # Path 发布器
-        path_qos = QoSProfile(
-            reliability=QoSReliabilityPolicy.RELIABLE,
-            history=QoSHistoryPolicy.KEEP_LAST,
-            depth=1,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL
-        )
-        self.path_pub = self.create_publisher(String, path_topic, path_qos)
-        self.path_rviz_pub = self.create_publisher(Path, path_rviz_topic, path_qos)
-
         # Web 路径摘要发布器（供 mf_manager.html 订阅）
         self.paths_for_web_pub = self.create_publisher(
-            String, '/planning/paths_for_web', path_qos
+            String, paths_web_topic, qos_profile
         )
 
         self.get_logger().info('DFS Planner Node started (Simplified)')
@@ -97,8 +108,8 @@ class DFSPlannerNode(Node):
                 return
 
             self.kfs_grid = grid
-            self.current_team = payload.get('team', 'red')
-            self.current_method = int(payload.get('method', 0))
+            self.current_team = payload.get('team', self.current_team)
+            self.current_method = int(payload.get('method', self.current_method))
 
             self.get_logger().info(
                 f'Received mf_r2_data: team={self.current_team}, '
@@ -112,8 +123,7 @@ class DFSPlannerNode(Node):
             self.get_logger().error(f'Error processing mf_r2_data: {e}')
 
     def _plan_all_starts(self):
-        """依次以 (0,0), (0,1), (0,2) 为起点规划，发布找到的路径"""
-        start_y = [0, 1, 2]
+        """依次以 start_y 中的各列为起点规划，发布找到的路径"""
 
         # 根据队伍选择高度图
         if self.current_team == 'blue':
@@ -125,17 +135,19 @@ class DFSPlannerNode(Node):
             self.GRID_COLS, self.GRID_ROWS,
             self.kfs_grid,
             height_map,
-            2,
             method=self.current_method,
             logger=self.get_logger(),
+            move_cost=self.MOVE_COST,
+            turn_cost=self.TURN_COST,
+            fetch_kfs2_cost=self.FETCH_KFS2_COST,
         )
-        self.get_logger().info(f'=== Planning from start_y={start_y}===')
-        path = planner.plan_path(start_y)
+        self.get_logger().info(f'=== Planning from start_y={self.start_y} ===')
+        path = planner.plan_path(self.start_y)
 
         # path 结构: [[], [], [], [], []] — kfs2=0..4 各一个 bucket
         for k in range(5):
             bucket = path[k]
-            n = min(3, len(bucket))
+            n = min(self.LOG_TOP_N, len(bucket))
             self.get_logger().info(
                 f'--- kfs2={k}: {len(bucket)} paths, showing top {n} ---'
             )
@@ -151,16 +163,16 @@ class DFSPlannerNode(Node):
                         f'{step[3]}, {step[4]}, {step[5]}, {step[6]}, {step[7]}]'
                     )
 
-        # 发布路径摘要到 Web 界面（kfs2=0..3 各取前10条）
+        # 发布路径摘要到 Web 界面
         self._publish_paths_for_web(path)
 
     def _publish_paths_for_web(self, path):
-        """将 kfs2=0..4 各前10条路径发布到 /planning/paths_for_web"""
+        """将 kfs2=0..4 各前 N 条路径发布到 Web 话题"""
         web_data = {'buckets': []}
 
         for k in range(5):  # kfs2 = 0, 1, 2, 3, 4
             bucket = path[k]
-            top_n = min(10, len(bucket))
+            top_n = min(self.WEB_PUB_TOP_N, len(bucket))
             bucket_entry = {
                 'kfs2_count': k,
                 'total': len(bucket),
@@ -192,11 +204,13 @@ class DFSPlannerNode(Node):
             f'{ {k: len(path[k]) for k in range(5)} }'
         )
 
+
 def main(args=None):
     rclpy.init(args=args)
     node = DFSPlannerNode()
     rclpy.spin(node)
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
