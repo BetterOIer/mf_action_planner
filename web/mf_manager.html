@@ -35,10 +35,10 @@
             padding-bottom: 10px;
         }
 
-        /* ==================== ROS 状态（左上角） ==================== */
+        /* ==================== ROS 状态（左下角） ==================== */
         .ros-status {
             position: fixed;
-            top: 6px;
+            bottom: 6px;
             left: 8px;
             font-size: 11px;
             color: #666;
@@ -63,7 +63,7 @@
             align-items: center;
             gap: 14px;
             box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-            z-index: 200;
+            z-index: 400;
             font-size: 14px;
             white-space: nowrap;
             transition: opacity 0.2s;
@@ -107,7 +107,7 @@
             display: flex;
             flex-direction: column;
             gap: 12px;
-            margin-top: 28px;
+            margin-right: 14px;
             flex-shrink: 0;
             align-self: flex-start;
             position: relative;
@@ -121,7 +121,7 @@
             gap: 5px;
             padding: 8px;
             background: white;
-            border-radius: 0 10px 10px 0;
+            border-radius: 10px;
             box-shadow: 2px 2px 10px rgba(0,0,0,0.10);
         }
 
@@ -131,7 +131,7 @@
             flex-direction: column;
             padding: 8px;
             background: white;
-            border-radius: 0 10px 10px 0;
+            border-radius: 10px;
             box-shadow: 2px 2px 10px rgba(0,0,0,0.10);
         }
 
@@ -141,7 +141,7 @@
             border: none;
             border-radius: 7px;
             cursor: pointer;
-            font-size: 10px;
+            font-size: 20px;
             font-weight: bold;
             color: white;
             transition: box-shadow 0.2s, opacity 0.2s, transform 0.15s;
@@ -171,7 +171,6 @@
 
         .publish-btn {
             background-color: #4CAF50;
-            margin-top: 4px;
         }
 
         .publish-btn:disabled {
@@ -199,20 +198,39 @@
         .content-area {
             flex: 1;
             display: flex;
+            margin-top: 10px;
             margin-left: 10px;
-            margin-right: 10px;
-            height: calc(100vh - 20px);
+            height: calc(100vh - 30px);
             gap: 10px;
+            margin-right: 10px;
+            align-self: flex-start;
+            width: calc(100vw - 140px);
         }
 
         /* ---------- 布局器区域 (3) ---------- */
         .grid-area {
-            flex: 3;
+            flex: 0 0 auto;
             display: flex;
-            flex-direction: column;
-            align-items: center;
+            flex-direction: row;
+            align-items: flex-start;
             padding-top: 4px;
             min-width: 0;
+        }
+
+        /* ---------- 路径列表区域 ---------- */
+        .paths-area {
+            flex: 1;
+            display: grid;
+            gap: 5px;
+            min-width: 0;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr 1fr;
+        }
+        @media (min-width: 1185px) {
+            .paths-area {
+                grid-template-columns: 1fr 1fr 1fr;
+                grid-template-rows: 1fr 1fr;
+            }
         }
 
         .grid-container {
@@ -317,22 +335,6 @@
             color: #333;
             box-shadow: 2px 2px 5px rgba(0,0,0,0.13),
                         -2px -2px 5px rgba(255,255,255,0.8);
-        }
-
-        /* ---------- 路径列表区域 (5) — 3行×2列 ---------- */
-        .paths-area {
-            flex: 5;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            min-width: 0;
-        }
-
-        .paths-row {
-            flex: 1;
-            display: flex;
-            gap: 5px;
-            min-height: 0;
         }
 
         .path-list-panel {
@@ -528,6 +530,45 @@
             box-shadow: none;
             opacity: 1;
         }
+        /* ==================== 窄屏 < 950px：上下布局 ==================== */
+        @media (max-width: 949px) {
+            body {
+                height: auto;
+                overflow: auto;
+            }
+            .app-container {
+                height: auto;
+                flex-direction: column;
+                align-items: center;
+                padding: 10px 20px 20px 20px;
+            }
+            .content-area {
+                flex: 0 0 auto;
+                flex-direction: column;
+                height: auto;
+                width: 100%;
+                max-width: 400px;
+                margin: 0 auto;
+            }
+            .grid-area {
+                flex: auto;
+                justify-content: center;
+                padding-top: 0;
+                margin-bottom: 10px;
+            }
+            .left-panels {
+                margin-right: 14px;
+            }
+            .paths-area {
+                grid-template-columns: 1fr;
+                grid-template-rows: none;
+                gap: 8px;
+                width: 100%;
+            }
+            .path-list-panel {
+                height: 260px;
+            }
+        }
     </style>
 </head>
 <body class="team-red">
@@ -542,27 +583,24 @@
     </div>
 
     <div class="app-container">
-        <!-- ========== 左侧面板容器 ========== -->
-        <div class="left-panels">
-            <!-- 工具栏面板 -->
-            <div class="toolbar-panel" id="toolbar">
-                <button class="tool-btn kfs1-btn" id="kfs1-btn" onclick="selectMode('kfs1')">KFS1</button>
-                <button class="tool-btn kfs2-btn" id="kfs2-btn" onclick="selectMode('kfs2')">KFS2</button>
-                <button class="tool-btn kfs-fake-btn" id="kfs-fake-btn" onclick="selectMode('kfs-fake')">K假</button>
-                <button class="tool-btn clear-btn" onclick="clearGrid()">清空</button>
-                <button class="tool-btn random-btn" onclick="randomPlacement(true)">随机</button>
-            </div>
-
-            <!-- 发送按钮独立面板 -->
-            <div class="publish-panel">
-                <button class="tool-btn publish-btn" id="publish-btn" onclick="publishSelectedPath()" disabled>发送</button>
-            </div>
-        </div>
-
         <!-- ========== 中间内容区 (3:5) ========== -->
         <div class="content-area">
             <!-- 布局器 (3) -->
             <div class="grid-area">
+                <!-- ========== 左侧工具面板 ========== -->
+                <div class="left-panels">
+                    <div class="toolbar-panel" id="toolbar">
+                        <button class="tool-btn kfs1-btn" id="kfs1-btn" onclick="selectMode('kfs1')">K1</button>
+                        <button class="tool-btn kfs2-btn" id="kfs2-btn" onclick="selectMode('kfs2')">K2</button>
+                        <button class="tool-btn kfs-fake-btn" id="kfs-fake-btn" onclick="selectMode('kfs-fake')">Kf</button>
+                        <button class="tool-btn clear-btn" onclick="clearGrid()">清</button>
+                        <button class="tool-btn random-btn" onclick="randomPlacement(true)">随</button>
+                    </div>
+                    <div class="publish-panel">
+                        <button class="tool-btn publish-btn" id="publish-btn" onclick="publishSelectedPath()" disabled>发</button>
+                    </div>
+                </div>
+
                 <div class="grid-container">
                     <div class="grid-wrapper">
                         <div class="grid" id="grid"></div>
@@ -585,38 +623,32 @@
 
             <!-- 路径列表 (5) — 3行 × 2列 -->
             <div class="paths-area" id="paths-area">
-                <div class="paths-row">
-                    <div class="path-list-panel" id="panel-custom">
-                        <div class="path-list-header">自定义路线</div>
-                        <div class="custom-action-bar">
-                            <button class="action-btn new-btn" onclick="navigateToEditor('new')">新建</button>
-                            <button class="action-btn modify-btn" id="modify-btn" onclick="navigateToEditor('modify')" disabled>修改</button>
-                        </div>
-                    </div>
-                    <div class="path-list-panel" id="panel-kfs2-0">
-                        <div class="path-list-header">KFS2 = 0<span class="badge" id="badge-0"></span></div>
-                        <div class="path-list-scroll" id="scroll-0"></div>
+                <div class="path-list-panel" id="panel-custom">
+                    <div class="path-list-header">自定义路线</div>
+                    <div class="custom-action-bar">
+                        <button class="action-btn new-btn" onclick="navigateToEditor('new')">新建</button>
+                        <button class="action-btn modify-btn" id="modify-btn" onclick="navigateToEditor('modify')" disabled>修改</button>
                     </div>
                 </div>
-                <div class="paths-row">
-                    <div class="path-list-panel" id="panel-kfs2-1">
-                        <div class="path-list-header">KFS2 = 1<span class="badge" id="badge-1"></span></div>
-                        <div class="path-list-scroll" id="scroll-1"></div>
-                    </div>
-                    <div class="path-list-panel" id="panel-kfs2-2">
-                        <div class="path-list-header">KFS2 = 2<span class="badge" id="badge-2"></span></div>
-                        <div class="path-list-scroll" id="scroll-2"></div>
-                    </div>
+                <div class="path-list-panel" id="panel-kfs2-0">
+                    <div class="path-list-header">KFS2 = 0<span class="badge" id="badge-0"></span></div>
+                    <div class="path-list-scroll" id="scroll-0"></div>
                 </div>
-                <div class="paths-row">
-                    <div class="path-list-panel" id="panel-kfs2-3">
-                        <div class="path-list-header">KFS2 = 3<span class="badge" id="badge-3"></span></div>
-                        <div class="path-list-scroll" id="scroll-3"></div>
-                    </div>
-                    <div class="path-list-panel" id="panel-kfs2-4">
-                        <div class="path-list-header">KFS2 = 4<span class="badge" id="badge-4"></span></div>
-                        <div class="path-list-scroll" id="scroll-4"></div>
-                    </div>
+                <div class="path-list-panel" id="panel-kfs2-1">
+                    <div class="path-list-header">KFS2 = 1<span class="badge" id="badge-1"></span></div>
+                    <div class="path-list-scroll" id="scroll-1"></div>
+                </div>
+                <div class="path-list-panel" id="panel-kfs2-2">
+                    <div class="path-list-header">KFS2 = 2<span class="badge" id="badge-2"></span></div>
+                    <div class="path-list-scroll" id="scroll-2"></div>
+                </div>
+                <div class="path-list-panel" id="panel-kfs2-3">
+                    <div class="path-list-header">KFS2 = 3<span class="badge" id="badge-3"></span></div>
+                    <div class="path-list-scroll" id="scroll-3"></div>
+                </div>
+                <div class="path-list-panel" id="panel-kfs2-4">
+                    <div class="path-list-header">KFS2 = 4<span class="badge" id="badge-4"></span></div>
+                    <div class="path-list-scroll" id="scroll-4"></div>
                 </div>
             </div>
         </div>

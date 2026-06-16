@@ -268,7 +268,7 @@ def _add_path(self, path, cost, kfs2_needed, kfs1_affected):
 
 **删除 fetch：**
 1. 按下已有 fetch 终点
-2. 拖动离开其命中圈 → fetch 被删除
+2. 拖动离开其命中圈再次进入 → fetch 被删除
 
 **可达性约束：** 假 KFS 格不可达；同一位置不可重复创建 fetch。
 

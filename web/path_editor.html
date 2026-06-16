@@ -17,16 +17,7 @@
         body.team-red  { background-color: rgb(254, 186, 163); }
         body.team-blue { background-color: rgb(129, 210, 214); }
 
-        /* ==================== 返回按钮 ==================== */
-        .back-btn {
-            position: fixed; top: 10px; left: 14px;
-            padding: 6px 16px; border: none; border-radius: 8px;
-            background-color: #607D8B; color: white;
-            font-size: 13px; font-weight: bold; cursor: pointer;
-            z-index: 200; box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-            transition: opacity 0.2s, transform 0.15s;
-        }
-        .back-btn:hover { opacity: 0.85; transform: scale(1.05); }
+        .back-btn { background-color: #607D8B; }
 
         /* ==================== 页面标题 ==================== */
         .page-title {
@@ -59,7 +50,7 @@
 
         .tool-btn {
             width: 44px; height: 44px; border: none; border-radius: 7px;
-            cursor: pointer; font-size: 10px; font-weight: bold; color: white;
+            cursor: pointer; font-size: 20px; font-weight: bold; color: white;
             transition: box-shadow 0.2s, opacity 0.2s, transform 0.15s;
             display: flex; align-items: center; justify-content: center;
             text-align: center; line-height: 1.2; flex-shrink: 0;
@@ -179,37 +170,71 @@
             display: inline-block; padding: 0px 4px; border-radius: 3px;
             font-weight: bold; font-size: 8px; min-width: 28px; text-align: center;
         }
-        .pv-tag.move  { background: #E3F2FD; color: #1565C0; }
-        .pv-tag.fetch { background: #FFF3E0; color: #E65100; }
+        .pv-tag.M { background: #E3F2FD; color: #1565C0; }
+        .pv-tag.F { background: #FFF3E0; color: #E65100; }
+        .pv-short { display: none; }
         .pv-coords { color: #555; }
         .pv-extra { color: #888; font-size: 9px; }
 
         /* ---------- debug 状态栏 ---------- */
         .debug-bar {
-            position: fixed; top: 6px; right: 8px;
-            font-size: 10px; color: #333; font-family: 'Consolas', monospace;
-            background: rgba(255,255,255,0.92); padding: 4px 10px;
-            border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.12);
-            z-index: 300; line-height: 1.5; max-width: 260px;
+            font-size: 10px; color: #555; font-family: Arial, sans-serif;
+            background: #f5f5f5; padding: 3px 8px;
+            border-bottom: 1px solid #e0e0e0;
+            line-height: 1.4; flex-shrink: 0;
+        }
+
+        /* ==================== 窄屏 < 700px ==================== */
+        @media (max-width: 699px) {
+            .tool-panels {
+                margin-right: 3px;
+            }
+            .path-viewer {
+                width: 60px;
+                margin-left: 3px;
+            }
+            .path-viewer .debug-bar {
+                display: none;
+            }
+            .pv-idx, .pv-extra, .pv-full {
+                display: none;
+            }
+            .pv-short {
+                display: inline;
+            }
+            .pv-tag {
+                min-width: auto;
+                padding: 0px 2px;
+            }
+        }
+        @media (min-width: 700px) {
+            .path-viewer {
+                width: 210px;
+            }
+            .pv-full {
+                display: inline;
+            }
+            .pv-short {
+                display: none;
+            }
         }
     </style>
 </head>
 <body class="team-red">
-    <button class="back-btn" onclick="goBack()">← 返回</button>
     <div class="page-title" id="page-title">路径编辑器</div>
-    <div class="debug-bar" id="debug-bar">等待操作...</div>
     <div class="ros-status" id="ros-status">ROS: 未连接</div>
 
     <div class="app-container">
         <!-- ========== 左侧工具面板 ========== -->
         <div class="tool-panels">
             <div class="editor-panel" id="editor-panel">
-                <button class="tool-btn move-btn"  id="move-btn"  onclick="activateTool('move')">移动</button>
-                <button class="tool-btn fetch-btn" id="fetch-btn" onclick="activateTool('fetch')">抓取</button>
-                <button class="tool-btn clear-btn" id="clear-btn" onclick="clearPath()">清空</button>
+                <button class="tool-btn move-btn"  id="move-btn"  onclick="activateTool('move')">移</button>
+                <button class="tool-btn fetch-btn" id="fetch-btn" onclick="activateTool('fetch')">抓</button>
+                <button class="tool-btn clear-btn" id="clear-btn" onclick="clearPath()">清</button>
             </div>
             <div class="editor-panel">
-                <button class="tool-btn publish-btn" id="publish-btn" onclick="publishCustomPath()" disabled>发送</button>
+                <button class="tool-btn back-btn" onclick="goBack()">返</button>
+                <button class="tool-btn publish-btn" id="publish-btn" onclick="publishCustomPath()" disabled>发</button>
             </div>
         </div>
 
@@ -235,7 +260,8 @@
 
         <!-- ========== 右侧路径查看器 ========== -->
         <div class="path-viewer" id="path-viewer">
-            <div class="path-viewer-header">动作序列</div>
+            <div class="path-viewer-header"><span class="pv-full">动作序列</span><span class="pv-short">动作</span></div>
+            <div class="debug-bar" id="debug-bar">待操作</div>
             <div class="path-viewer-scroll" id="path-viewer-scroll"></div>
         </div>
     </div>
@@ -354,17 +380,21 @@
         if (seq.length === 0) { el.innerHTML = ''; return; }
         let html = '';
         seq.forEach((step, i) => {
-            const action = step[0] === 0 ? 'move' : 'fetch';
+            const tagClass = step[0] === 0 ? 'M' : 'F';
+            const fullName = step[0] === 0 ? 'move' : 'fetch';
             const x = step[1], y = step[2];
             const val3 = step[3];
             const yaw = step[4];
-            const label = action === 'move'
+            const label = step[0] === 0
                 ? 'z=' + val3
                 : 'Δh=' + (val3 >= 0 ? '+' : '') + val3;
             html += '<div class="pv-step">';
             html += '<span class="pv-idx">#' + (i + 1) + '</span>';
-            html += '<span class="pv-tag ' + action + '">' + action + '</span>';
-            html += '<span class="pv-coords">(' + x + ', ' + y + ')</span>';
+            html += '<span class="pv-tag ' + tagClass + '">';
+            html += '<span class="pv-full">' + fullName + '</span>';
+            html += '<span class="pv-short">' + tagClass + '</span>';
+            html += '</span>';
+            html += '<span class="pv-coords"><span class="pv-x">(' + x + ', </span>' + y + ')</span>';
             html += '<span class="pv-extra">' + label + ' yaw=' + yaw.toFixed(2) + '</span>';
             html += '</div>';
         });
@@ -1121,51 +1151,103 @@
         toolState.middlePrevNodeId = null;
         toolState.middleNextNodeId = null;
 
-        // ★ 若点击在已有 fetch 节点上 → 进入删除模式
+        // ★ 若点击在已有 fetch 节点上（不论是否有 move）
         const clickedFetch = findFetchAt(gx, gy);
-        if (clickedFetch) {
+        const clickedMove  = findMoveAt(gx, gy);
+
+        if (clickedFetch && !clickedMove) {
+            // 纯 fetch 终点 → 撤销模式（离开+重入=删除）
             toolState.isDragging = true;
             toolState.dragStartX = clickedFetch.x;
             toolState.dragStartY = clickedFetch.y;
             toolState.dragStartNodeId = clickedFetch.parentMoveId;
             toolState.fetchDeleteTargetId = clickedFetch.id;
-            toolState.highlightCells = []; // 无需高亮
+            toolState.highlightCells = [];
+            toolState.dragPhase = 'dwelling';
             redrawAll();
             return;
         }
 
-        // 起点必须是绿色 move 节点
-        const moveNode = findMoveAt(gx, gy);
-        if (!moveNode) return;
+        if (clickedFetch && clickedMove) {
+            // fetch+move 重合 → 合并模式：可撤销 fetch 也可新建 fetch
+            toolState.isDragging = true;
+            toolState.dragStartX = clickedMove.x;
+            toolState.dragStartY = clickedMove.y;
+            toolState.dragStartNodeId = clickedMove.id;
+            toolState.fetchDeleteTargetId = clickedFetch.id;
+            toolState.dragPhase = 'dwelling';
+            toolState.highlightCells = getReachableAdjacent(clickedMove.x, clickedMove.y).filter(h => {
+                return !findFetchAt(h.x, h.y);
+            });
+            redrawAll();
+            return;
+        }
 
+        // 纯 move 节点 → 创建模式
+        if (!clickedMove) return;
         toolState.isDragging = true;
-        toolState.dragStartX = moveNode.x;
-        toolState.dragStartY = moveNode.y;
-        toolState.dragStartNodeId = moveNode.id;
-        toolState.highlightCells = getReachableAdjacent(moveNode.x, moveNode.y).filter(h => {
-            // 仅过滤假KFS（已在 getReachableAdjacent 中处理）和已有 fetch 的位置
+        toolState.dragStartX = clickedMove.x;
+        toolState.dragStartY = clickedMove.y;
+        toolState.dragStartNodeId = clickedMove.id;
+        toolState.dragPhase = 'dwelling';
+        toolState.highlightCells = getReachableAdjacent(clickedMove.x, clickedMove.y).filter(h => {
             return !findFetchAt(h.x, h.y);
         });
         redrawAll();
     }
 
     function updateFetchDrag(gx, gy) {
-        const { highlightCells, dragStartNodeId, fetchDeleteTargetId,
-                dragStartX, dragStartY, cursorPx, cursorPy } = toolState;
+        const { highlightCells, dragStartNodeId, fetchDeleteTargetId, dragPhase,
+                dragStartX, dragStartY, cursorPx, cursorPy, undonePos, hasLeftUndone } = toolState;
         const cp = { px: cursorPx, py: cursorPy };
+        const hasHighlights = highlightCells.length > 0; // 合并模式（fetch+move 重合）
 
-        // ★ 删除模式：离开 fetch 节点半径即删除
+        // ★ 撤销 / 合并模式
         if (fetchDeleteTargetId !== null) {
             const sp = gridToPixel(dragStartX, dragStartY);
-            if (Math.hypot(sp.px - cp.px, sp.py - cp.py) > HIT_RADIUS) {
+            const distFromStart = Math.hypot(sp.px - cp.px, sp.py - cp.py);
+
+            // 更新离开锁定位
+            if (undonePos && !hasLeftUndone) {
+                const up = gridToPixel(undonePos.x, undonePos.y);
+                if (Math.hypot(up.px - cp.px, up.py - cp.py) > HIT_RADIUS) {
+                    toolState.hasLeftUndone = true;
+                }
+            }
+
+            // 撤销：离开后重新进入 → 删除 fetch
+            if (dragPhase === 'left' && distFromStart <= HIT_RADIUS) {
                 removeFetchNode(fetchDeleteTargetId);
+                toolState.undonePos = { x: dragStartX, y: dragStartY };
+                toolState.hasLeftUndone = false;
                 endDrag();
                 redrawAll();
+                return;
+            }
+
+            // 更新 dragPhase
+            if (dragPhase === 'dwelling' && distFromStart > HIT_RADIUS) {
+                toolState.dragPhase = 'left';
+            }
+
+            // 合并模式：dragPhase='left' 时允许新建 fetch
+            if (hasHighlights && dragPhase === 'left') {
+                const hit = highlightCells.find(h => {
+                    const p = gridToPixel(h.x, h.y);
+                    return Math.hypot(p.px - cp.px, p.py - cp.py) <= HIT_RADIUS;
+                });
+                if (hit && dragStartNodeId !== null) {
+                    addFetchNode(hit.x, hit.y, dragStartNodeId);
+                    toolState.isDragging = false;
+                    toolState.highlightCells = [];
+                    toolState.dragChain = [];
+                    return;
+                }
             }
             return;
         }
 
-        // 创建模式
+        // ★ 纯创建模式
         const hit = highlightCells.find(h => {
             const p = gridToPixel(h.x, h.y);
             return Math.hypot(p.px - cp.px, p.py - cp.py) <= HIT_RADIUS;
@@ -1239,15 +1321,17 @@
         const dist = s.isDragging
             ? Math.round(Math.hypot(sp.px - s.cursorPx, sp.py - s.cursorPy))
             : 0;
+        const phaseMap = { dwelling: '驻留', left: '已离开' };
+        const toolMap = { move: '移动', fetch: '抓取' };
         el.innerHTML =
-            'phase:<b>' + s.dragPhase + '</b> ' +
-            'drag:' + (s.isDragging ? 'Y' : 'N') + ' ' +
-            'tool:' + (s.activeTool || '-') + ' ' +
-            'chain:' + s.dragChain.length + ' ' +
-            'dist:' + dist + 'px ' +
-            'start:(' + s.dragStartX + ',' + s.dragStartY + ') ' +
-            'cursor:(' + Math.round(s.cursorPx) + ',' + Math.round(s.cursorPy) + ')' +
-            (s.undonePos ? ' lock:(' + s.undonePos.x + ',' + s.undonePos.y + '):' + (s.hasLeftUndone ? 'free' : 'LOCKED') : '');
+            '状态:<b>' + (phaseMap[s.dragPhase] || s.dragPhase) + '</b> ' +
+            '拖拽:' + (s.isDragging ? '是' : '否') + ' ' +
+            '工具:' + (toolMap[s.activeTool] || '-') + ' ' +
+            '链长:' + s.dragChain.length + ' ' +
+            '距离:' + dist + 'px ' +
+            '起点:(' + s.dragStartX + ',' + s.dragStartY + ') ' +
+            '光标:(' + Math.round(s.cursorPx) + ',' + Math.round(s.cursorPy) + ')' +
+            (s.undonePos ? ' 锁定:(' + s.undonePos.x + ',' + s.undonePos.y + '):' + (s.hasLeftUndone ? '已解' : '锁定中') : '');
     }
 
     // ============================================================
