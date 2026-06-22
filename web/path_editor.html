@@ -95,6 +95,7 @@
         .path-overlay {
             position: absolute; top: 0; left: 0;
             z-index: 10; cursor: crosshair;
+            touch-action: none;
         }
 
         .grid {
@@ -913,6 +914,61 @@
         redrawAll();
     }
 
+    // ---- 触摸事件处理（移动端兼容） ----
+    function getTouchPos(e) {
+        const canvas = document.getElementById('path-overlay');
+        const rect = canvas.getBoundingClientRect();
+        // touchstart / touchmove 用 touches[0]，touchend 用 changedTouches[0]
+        const touch = e.touches[0] || e.changedTouches[0];
+        if (!touch) return null;
+        return { px: touch.clientX - rect.left, py: touch.clientY - rect.top };
+    }
+
+    function onTouchStart(e) {
+        if (!toolState.activeTool) return;
+        if (toolState.isDragging) return;
+        if (e.touches.length !== 1) return; // 仅处理单指
+
+        e.preventDefault(); // 阻止浏览器滚动和合成鼠标事件
+
+        const pos = getTouchPos(e);
+        if (!pos) return;
+        const g = pixelToGrid(pos.px, pos.py);
+
+        if (toolState.activeTool === 'move') {
+            startMoveDrag(g.x, g.y, pos.px, pos.py);
+        } else if (toolState.activeTool === 'fetch') {
+            startFetchDrag(g.x, g.y, pos.px, pos.py);
+        }
+    }
+
+    function onTouchMove(e) {
+        if (!toolState.isDragging) return;
+        if (e.touches.length !== 1) return;
+
+        e.preventDefault(); // 阻止浏览器滚动
+
+        const pos = getTouchPos(e);
+        if (!pos) return;
+        const g = pixelToGrid(pos.px, pos.py);
+        toolState.cursorPx = pos.px;
+        toolState.cursorPy = pos.py;
+
+        if (toolState.activeTool === 'move') {
+            updateMoveDrag(g.x, g.y);
+        } else if (toolState.activeTool === 'fetch') {
+            updateFetchDrag(g.x, g.y);
+        }
+        redrawAll();
+        updateDebug();
+    }
+
+    function onTouchEnd(e) {
+        if (!toolState.isDragging) return;
+        endDrag();
+        redrawAll();
+    }
+
     // ---- 移动工具拖拽 ----
 
     function startMoveDrag(gx, gy, px, py) {
@@ -1339,7 +1395,9 @@
     // ============================================================
     const rosStatusEl = document.getElementById('ros-status');
     let rosConnected = false;
-    const ros = new ROSLIB.Ros({ url: 'ws://localhost:9090' });
+    // 从页面 URL 自动获取主机名，兼容本地和局域网访问
+    const rosUrl = 'ws://' + window.location.hostname + ':9090';
+    const ros = new ROSLIB.Ros({ url: rosUrl });
 
     ros.on('error', () => {
         rosConnected = false;
@@ -1436,6 +1494,11 @@
         canvas.addEventListener('mousedown', onMouseDown);
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
+
+        // 绑定触摸事件（移动端兼容）：touchstart/touchmove 设 passive:false 以允许 preventDefault
+        canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+        canvas.addEventListener('touchmove',  onTouchMove,  { passive: false });
+        canvas.addEventListener('touchend',   onTouchEnd);
 
         // 初始渲染
         setTimeout(() => redrawAll(), 100);
