@@ -16,6 +16,7 @@ from launch.actions import (
     RegisterEventHandler,
     TimerAction,
 )
+from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessStart
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -70,7 +71,7 @@ def generate_launch_description():
     ])
 
     open_browser_action = ExecuteProcess(
-        condition=None,
+        condition=IfCondition(LaunchConfiguration('open_browser')),
         cmd=['xdg-open', web_file],
         shell=False,
         name='open_mf_manager_html',

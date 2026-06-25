@@ -696,7 +696,9 @@
         // ========================
         const rosStatus = document.getElementById('ros-status');
         // 从页面 URL 自动获取主机名，兼容本地和局域网访问
-        const rosUrl = 'ws://' + window.location.hostname + ':9090';
+        // file:// 协议下 hostname 为空，fallback 到 localhost
+        const rosHost = window.location.hostname || 'localhost';
+        const rosUrl = 'ws://' + rosHost + ':9090';
         let ros = new ROSLIB.Ros({ url: rosUrl });
 
         ros.on('error', function(error) {

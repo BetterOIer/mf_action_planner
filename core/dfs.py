@@ -74,14 +74,16 @@ class DFSPlanner:
 
     def _dfs(self, posX, posY, yaw):
         if posX == 5:
-            self.cnt_path.append([0, float(posX), float(posY), 0.0, self.method*float(yaw), 0.0, 0.0, 0.0])
+            h = float(self.kfs_grid_height[posX][posY])
+            self.cnt_path.append([0, float(posX), float(posY), h, self.method*float(yaw), 0.0, 0.0, 0.0])
             self._copy_path(self.cnt_path, self.eval_path)
             self._evaluate_path()
             self.cnt_path.pop()
             return
 
         self.visited[posX][posY] = True
-        self.cnt_path.append([0, float(posX), float(posY), 0.0, self.method*float(yaw), 0.0, 0.0, 0.0])
+        h = float(self.kfs_grid_height[posX][posY])
+        self.cnt_path.append([0, float(posX), float(posY), h, self.method*float(yaw), 0.0, 0.0, 0.0])
         
         for direction in self.DIRECTIONS:
             newX = posX + direction[0]
@@ -193,7 +195,8 @@ class DFSPlanner:
             grid_row = round(step[1])
             grid_col = round(step[2])
 
-            pub_path.append([0, grid_row, grid_col, 0, step[4], 0, 0, 0])
+            move_h = float(self.kfs_grid_height[grid_row][grid_col])
+            pub_path.append([0, grid_row, grid_col, move_h, step[4], 0, 0, 0])
 
             extra_steps = []
             next_step = self.eval_path[i + 1] if i + 1 < len(self.eval_path) else None
@@ -228,6 +231,15 @@ class DFSPlanner:
                 extra_steps.append([1, nr, nc, h, next_step[4], 0, 0, 0])
 
             pub_path.extend(extra_steps)
+
+            # ---- 转向：如果下一步方向与当前不同，原地转向 ----
+            if (self.method == 1
+                    and next_step is not None
+                    and step[4] != next_step[4]):
+                turn_h = float(self.kfs_grid_height[grid_row][grid_col])
+                pub_path.append([
+                    0, grid_row, grid_col, turn_h, next_step[4], 0, 0, 0
+                ])
 
         # ---- 9. 首排 kfs2 未取则进入 grid 即无效 ----
         if kfs2_needed_in_first_row != 0:

@@ -299,7 +299,7 @@
         [0,   0,   0],
         [200, 400, 200],
         [400, 600, 400],
-        [200, 400, 600],
+        [600, 400, 200],
         [400, 200, 400],
         [0,   0,   0],
     ];
@@ -307,7 +307,7 @@
         [0,   0,   0],
         [200, 400, 200],
         [400, 600, 400],
-        [600, 400, 200],
+        [200, 400, 600],
         [400, 200, 400],
         [0,   0,   0],
     ];
@@ -323,53 +323,62 @@
         return Math.atan2(y2 - y1, x2 - x1);
     }
 
-    /** 构建完整动作序列 [ [action,x,y,z_or_dh,yaw,0,0,0], ... ] */
+    /** 构建完整动作序列 [ [action,x,y,z_or_dh,yaw,0,0,0], ... ]
+     *  规则：在下一步方向与当前有效方向不同时，
+     *  在上一个 move 位置插入一个原地转向步，方向=下一步目标方向。
+     *  「当前有效方向」会追踪 fetch 后的朝向，因此 fetch 后如需改变朝向
+     *  去往下一个 move，也会正确插入转向步。 */
     function buildActionSequence() {
         const seq = [];
-        const isOmni = (method === 1);  // 1=uni, 0=omni → wait, check original: currentMethod=1 means...
-
-        // Re-checking: in mf_manager, currentMethod = 1 corresponds to "单向" (uni) button index 0
-        // and currentMethod = 0 corresponds to "全向" (omni) button index 1
-        // Actually looking at the original code:
-        // function setMethod(method) { currentMethod = !method; }
-        // Radio: 单向 index 0 calls setMethod(0) → currentMethod = !0 = 1
-        // Radio: 全向 index 1 calls setMethod(1) → currentMethod = !1 = 0
-        // And the data published: method: currentMethod
-        // So currentMethod = 1 → uni, currentMethod = 0 → omni
-        // In path_editor we read: method = editorData.method, default 1
         const isUni = (method === 1);
 
-        let prevX = null, prevY = null, prevZ = null;
+        let prevMoveNode = null;
+        let lastEffectiveYaw = null;   // 最后一个动作执行后机器人的朝向
         let node = getChainHead();
         while (node) {
-            const fromX = (prevX !== null) ? prevX : node.x;
-            const fromY = (prevY !== null) ? prevY : node.y;
+            const nextNode = node.nextId ? getMoveNodeById(node.nextId) : null;
+            const z = getHeight(node.x, node.y);
 
-            // move
-            let z = getHeight(node.x, node.y);
-            let yaw;
+            // --- 计算到达本 move 节点的朝向 ---
+            let arrivalYaw;
             if (isUni) {
-                yaw = calcYaw(fromX, fromY, node.x, node.y);
+                if (prevMoveNode) {
+                    arrivalYaw = calcYaw(prevMoveNode.x, prevMoveNode.y, node.x, node.y);
+                } else if (nextNode) {
+                    // 首节点：朝向下一个节点
+                    arrivalYaw = calcYaw(node.x, node.y, nextNode.x, nextNode.y);
+                } else {
+                    arrivalYaw = 0;
+                }
             } else {
-                yaw = 0;
+                arrivalYaw = 0;
             }
-            seq.push([0, node.x, node.y, z, parseFloat(yaw.toFixed(4)), 0, 0, 0]);
-            const moveZ = z;
 
-            // fetch 子节点
+            // --- 转向步：上个有效朝向 ≠ 本次到达朝向时，在上一个 move 位置原地转向 ---
+            if (isUni && prevMoveNode && lastEffectiveYaw !== null
+                && Math.abs(lastEffectiveYaw - arrivalYaw) > 1e-6) {
+                const prevZ = getHeight(prevMoveNode.x, prevMoveNode.y);
+                seq.push([0, prevMoveNode.x, prevMoveNode.y, prevZ,
+                          parseFloat(arrivalYaw.toFixed(4)), 0, 0, 0]);
+            }
+
+            // --- move 步 ---
+            seq.push([0, node.x, node.y, z, parseFloat(arrivalYaw.toFixed(4)), 0, 0, 0]);
+            lastEffectiveYaw = arrivalYaw;
+
+            // --- fetch 步子节点 ---
             (node.fetchIds || []).forEach(fid => {
                 const f = getFetchNodeById(fid);
                 if (!f) return;
                 const fz = getHeight(f.x, f.y);
-                const dh = fz - moveZ;
+                const dh = fz - z;
                 const fyaw = calcYaw(node.x, node.y, f.x, f.y);
                 seq.push([1, f.x, f.y, dh, parseFloat(fyaw.toFixed(4)), 0, 0, 0]);
+                lastEffectiveYaw = fyaw;   // fetch 后机器人朝向 fetch 目标
             });
 
-            prevX = node.x;
-            prevY = node.y;
-            prevZ = moveZ;
-            node = node.nextId ? getMoveNodeById(node.nextId) : null;
+            prevMoveNode = node;
+            node = nextNode;
         }
         return seq;
     }
@@ -616,10 +625,15 @@
         if (!detail || detail.length === 0) return;
 
         let lastMoveId = null;
+        let lastMoveX = null, lastMoveY = null;
         detail.forEach(step => {
             const action = step[0], x = Math.round(step[1]), y = Math.round(step[2]);
             const z = step[3] || 0, yaw = step[4] || 0;
             if (action === 0) {
+                // 跳过原地转向步（与上一个 move 坐标相同）
+                if (lastMoveX === x && lastMoveY === y) {
+                    return;
+                }
                 const id = editorPath.nextId++;
                 const node = { id, x, y, z, yaw, prevId: lastMoveId, nextId: null, fetchIds: [] };
                 editorPath.moveNodes.push(node);
@@ -628,6 +642,8 @@
                     if (prev) prev.nextId = id;
                 }
                 lastMoveId = id;
+                lastMoveX = x;
+                lastMoveY = y;
                 // 首步在 x=0 → 记录 entry
                 if (entryY === null && x === 0) entryY = y;
             } else {
@@ -1396,7 +1412,9 @@
     const rosStatusEl = document.getElementById('ros-status');
     let rosConnected = false;
     // 从页面 URL 自动获取主机名，兼容本地和局域网访问
-    const rosUrl = 'ws://' + window.location.hostname + ':9090';
+    // file:// 协议下 hostname 为空，fallback 到 localhost
+    const rosHost = window.location.hostname || 'localhost';
+    const rosUrl = 'ws://' + rosHost + ':9090';
     const ros = new ROSLIB.Ros({ url: rosUrl });
 
     ros.on('error', () => {
