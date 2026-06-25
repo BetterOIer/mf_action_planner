@@ -26,6 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             'dfs_planner_node = app.dfs_planner_node:main',
+            'mf_buffer_node = app.mf_buffer_node:main',
         ],
     },
 )

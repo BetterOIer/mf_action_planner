@@ -4,8 +4,9 @@ mf_action_planner 完整启动文件
 
 启动顺序：
 1. rosbridge_server (rosbridge_websocket) — WebSocket 桥接
-2. 自动打开 mf_manager.html 网页         — 可视化交互界面
-3. dfs_planner_node                      — DFS 路径规划节点
+2. mf_buffer_node                         — 暂存区（缓存 /mf_action_seq）
+3. 自动打开 mf_manager.html 网页         — 可视化交互界面
+4. dfs_planner_node                      — DFS 路径规划节点
 """
 
 from launch import LaunchDescription
@@ -78,6 +79,16 @@ def generate_launch_description():
     )
 
     # ============================
+    # 2. mf_buffer_node — 暂存区
+    # ============================
+    buffer_node = Node(
+        package='mf_action_planner',
+        executable='mf_buffer_node',
+        name='mf_buffer_node',
+        output='screen',
+    )
+
+    # ============================
     # 3. dfs_planner_node — DFS 路径规划
     # ============================
     dfs_planner_node = Node(
@@ -110,6 +121,7 @@ def generate_launch_description():
     ld = LaunchDescription(declared_arguments)
     ld.add_action(LogInfo(msg='=== Starting mf_action_planner full stack ==='))
     ld.add_action(rosbridge_node)
+    ld.add_action(buffer_node)
     ld.add_action(delayed_browser_open)
     ld.add_action(dfs_planner_node)
     ld.add_action(LogInfo(msg='=== All nodes launched ==='))

@@ -695,28 +695,32 @@
         // ROS 连接
         // ========================
         const rosStatus = document.getElementById('ros-status');
+        let rosBaseStatus = 'ROS: 未连接';
         // 从页面 URL 自动获取主机名，兼容本地和局域网访问
         // file:// 协议下 hostname 为空，fallback 到 localhost
         const rosHost = window.location.hostname || 'localhost';
         const rosUrl = 'ws://' + rosHost + ':9090';
         let ros = new ROSLIB.Ros({ url: rosUrl });
 
+        function setRosStatus(text, color) {
+            rosBaseStatus = text;
+            if (color) rosStatus.style.color = color;
+            updateRosStatusDisplay();
+        }
+
         ros.on('error', function(error) {
             console.log('Error connecting to ROS:', error);
-            rosStatus.textContent = 'ROS: 错误';
-            rosStatus.style.color = '#e53935';
+            setRosStatus('ROS: 错误', '#e53935');
         });
 
         ros.on('close', function() {
             console.log('Connection to ROS closed');
-            rosStatus.textContent = 'ROS: 断开';
-            rosStatus.style.color = '#aaa';
+            setRosStatus('ROS: 断开', '#aaa');
         });
 
         ros.on('connection', function() {
             console.log('Connected to ROS');
-            rosStatus.textContent = 'ROS: 已连接';
-            rosStatus.style.color = '#43A047';
+            setRosStatus('ROS: 已连接', '#43A047');
         });
 
         // /mf_r2_data 发布器（合并 grid + team + method）
@@ -741,6 +745,23 @@
                 console.error('Failed to parse paths_for_web:', e);
             }
         });
+
+        // 暂存区状态订阅器
+        let bufferHasData = false;
+        const bufferStatusSub = new ROSLIB.Topic({
+            ros: ros,
+            name: '/mf_buffer_status',
+            messageType: 'std_msgs/String'
+        });
+        bufferStatusSub.subscribe(function(message) {
+            bufferHasData = (message.data === 'has_data');
+            updateRosStatusDisplay();
+        });
+
+        function updateRosStatusDisplay() {
+            const suffix = bufferHasData ? ' | 暂存区: 有数据' : ' | 暂存区: 空';
+            rosStatus.textContent = rosBaseStatus + suffix;
+        }
 
         // 行动序列发布器 → /mf_action_seq
         const actionSeqPublisher = new ROSLIB.Topic({
@@ -1001,11 +1022,9 @@
 
             actionSeqPublisher.publish(msg);
             const label = (cost !== undefined && cost !== null) ? (' | 消耗' + cost) : '';
-            rosStatus.textContent = '已发送 ' + numSteps + ' 步' + label;
-            rosStatus.style.color = '#4CAF50';
+            setRosStatus('已发送 ' + numSteps + ' 步' + label, '#4CAF50');
             setTimeout(() => {
-                rosStatus.textContent = 'ROS: 已连接';
-                rosStatus.style.color = '#43A047';
+                setRosStatus('ROS: 已连接', '#43A047');
             }, 3000);
         }
 

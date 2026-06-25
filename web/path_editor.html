@@ -1411,29 +1411,49 @@
     // ============================================================
     const rosStatusEl = document.getElementById('ros-status');
     let rosConnected = false;
+    let rosBaseStatus = 'ROS: 未连接';
     // 从页面 URL 自动获取主机名，兼容本地和局域网访问
     // file:// 协议下 hostname 为空，fallback 到 localhost
     const rosHost = window.location.hostname || 'localhost';
     const rosUrl = 'ws://' + rosHost + ':9090';
     const ros = new ROSLIB.Ros({ url: rosUrl });
 
+    let bufferHasData = false;
+    function setRosStatus(text, color) {
+        rosBaseStatus = text;
+        if (color) rosStatusEl.style.color = color;
+        updateRosStatusDisplay();
+    }
+    function updateRosStatusDisplay() {
+        const suffix = bufferHasData ? ' | 暂存区: 有数据' : ' | 暂存区: 空';
+        rosStatusEl.textContent = rosBaseStatus + suffix;
+    }
+
     ros.on('error', () => {
         rosConnected = false;
-        rosStatusEl.textContent = 'ROS: 错误';
-        rosStatusEl.style.color = '#e53935';
+        setRosStatus('ROS: 错误', '#e53935');
         updatePublishBtn();
     });
     ros.on('close', () => {
         rosConnected = false;
-        rosStatusEl.textContent = 'ROS: 断开';
-        rosStatusEl.style.color = '#aaa';
+        setRosStatus('ROS: 断开', '#aaa');
         updatePublishBtn();
     });
     ros.on('connection', () => {
         rosConnected = true;
-        rosStatusEl.textContent = 'ROS: 已连接';
-        rosStatusEl.style.color = '#43A047';
+        setRosStatus('ROS: 已连接', '#43A047');
         updatePublishBtn();
+    });
+
+    // 暂存区状态订阅
+    const bufferStatusSub = new ROSLIB.Topic({
+        ros: ros,
+        name: '/mf_buffer_status',
+        messageType: 'std_msgs/String'
+    });
+    bufferStatusSub.subscribe(function(message) {
+        bufferHasData = (message.data === 'has_data');
+        updateRosStatusDisplay();
     });
 
     const actionSeqPublisher = new ROSLIB.Topic({
@@ -1472,12 +1492,10 @@
             data: flatData
         });
         actionSeqPublisher.publish(msg);
-        rosStatusEl.textContent = '已发送 ' + numSteps + ' 步';
-        rosStatusEl.style.color = '#4CAF50';
+        setRosStatus('已发送 ' + numSteps + ' 步', '#4CAF50');
         setTimeout(() => {
             if (rosConnected) {
-                rosStatusEl.textContent = 'ROS: 已连接';
-                rosStatusEl.style.color = '#43A047';
+                setRosStatus('ROS: 已连接', '#43A047');
             }
         }, 3000);
     }
