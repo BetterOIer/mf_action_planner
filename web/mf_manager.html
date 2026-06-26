@@ -49,57 +49,125 @@
             z-index: 200;
         }
 
-        /* ==================== 自动发送倒计时提示框 ==================== */
-        .auto-send-toast {
-            position: fixed;
-            top: 16px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #FFF8E1;
-            border: 2px solid #FFB300;
+        /* ==================== 滑动发送面板 ==================== */
+        .publish-panel {
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+            background: white;
             border-radius: 10px;
-            padding: 10px 20px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.10);
+            height: 150px;
+        }
+
+        .slide-rail {
+            flex: 1;
+            position: relative;
+            background: #e0e0e0;
+            border-radius: 10px;
+            width: 44px;
+            margin: 0 auto;
+            overflow: hidden;
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.12),
+                        inset -2px -2px 5px rgba(255,255,255,0.7);
+        }
+
+        .slide-rail-arrows {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 10px;
+            height: 56px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-evenly;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .slide-rail-arrow {
+            width: 0;
+            height: 0;
+            border-left: 7px solid transparent;
+            border-right: 7px solid transparent;
+            border-top: 9px solid #bbb;
+        }
+
+        .slide-thumb {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 44px;
+            height: 44px;
+            background-color: #4CAF50;
+            border-radius: 7px;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
             display: flex;
             align-items: center;
-            gap: 14px;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-            z-index: 400;
-            font-size: 14px;
-            white-space: nowrap;
-            transition: opacity 0.2s;
+            justify-content: center;
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+            z-index: 2;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
         }
 
-        .auto-send-toast.hidden {
-            display: none;
+        .slide-thumb:active {
+            cursor: grabbing;
         }
 
-        .auto-send-toast .toast-text {
-            color: #E65100;
-            font-weight: 500;
+        .slide-thumb.disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            pointer-events: none;
+            box-shadow: none;
         }
 
-        .auto-send-toast .toast-btn {
-            padding: 5px 14px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: bold;
-            transition: opacity 0.15s;
-        }
-
-        .auto-send-toast .toast-btn:hover {
-            opacity: 0.85;
-        }
-
-        .auto-send-toast .toast-btn.cancel {
+        /* --- 清除滑动 --- */
+        .clear-slide-rail {
+            position: relative;
             background: #e0e0e0;
-            color: #333;
+            border-radius: 10px;
+            width: 44px;
+            height: 100px;
+            margin: 0 auto;
+            overflow: hidden;
+            flex-shrink: 0;
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.12),
+                        inset -2px -2px 5px rgba(255,255,255,0.7);
         }
 
-        .auto-send-toast .toast-btn.send-now {
-            background: #4CAF50;
+        .clear-slide-thumb {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 44px;
+            height: 44px;
+            background-color: #6c757d;
+            border-radius: 7px;
             color: white;
+            font-size: 20px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+            z-index: 2;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        .clear-slide-thumb:active {
+            cursor: grabbing;
+        }
+
+        .clear-slide-rail .slide-rail-arrows {
+            height: 42px;
+            bottom: 6px;
         }
 
         /* ==================== 左侧面板容器 ==================== */
@@ -119,16 +187,6 @@
             display: flex;
             flex-direction: column;
             gap: 5px;
-            padding: 8px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 2px 2px 10px rgba(0,0,0,0.10);
-        }
-
-        /* ==================== 发送按钮独立面板 ==================== */
-        .publish-panel {
-            display: flex;
-            flex-direction: column;
             padding: 8px;
             background: white;
             border-radius: 10px;
@@ -168,26 +226,6 @@
         .kfs1-btn { background-color: #0000FF; }
         .kfs2-btn { background-color: #f44336; }
         .kfs-fake-btn { background-color: #9E9E9E; }
-
-        .publish-btn {
-            background-color: #4CAF50;
-        }
-
-        .publish-btn:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-            opacity: 0.6;
-        }
-
-        .publish-btn:disabled:hover {
-            transform: none;
-            box-shadow: none;
-        }
-
-        .clear-btn {
-            background-color: #6c757d;
-            margin-top: 4px;
-        }
 
         .random-btn {
             background-color: #FF9800;
@@ -576,13 +614,6 @@
     <!-- ROS 状态（左上角） -->
     <div class="ros-status" id="ros-status">ROS: 未连接</div>
 
-    <!-- 自动发送倒计时提示框 -->
-    <div class="auto-send-toast hidden" id="auto-send-toast">
-        <span class="toast-text" id="toast-text">10 秒后自动发送 KFS2=2 路径 #1</span>
-        <button class="toast-btn cancel" onclick="cancelAutoSend(true)">取消</button>
-        <button class="toast-btn send-now" onclick="sendNow()">立即发送</button>
-    </div>
-
     <div class="app-container">
         <!-- ========== 中间内容区 (3:5) ========== -->
         <div class="content-area">
@@ -594,11 +625,24 @@
                         <button class="tool-btn kfs1-btn" id="kfs1-btn" onclick="selectMode('kfs1')">K1</button>
                         <button class="tool-btn kfs2-btn" id="kfs2-btn" onclick="selectMode('kfs2')">K2</button>
                         <button class="tool-btn kfs-fake-btn" id="kfs-fake-btn" onclick="selectMode('kfs-fake')">Kf</button>
-                        <button class="tool-btn clear-btn" onclick="clearGrid()">清</button>
+                        <div class="clear-slide-rail" id="clear-slide-rail">
+                            <div class="slide-rail-arrows">
+                                <span class="slide-rail-arrow"></span>
+                                <span class="slide-rail-arrow"></span>
+                            </div>
+                            <div class="clear-slide-thumb" id="clear-slide-thumb">清</div>
+                        </div>
                         <button class="tool-btn random-btn" onclick="randomPlacement(true)">随</button>
                     </div>
-                    <div class="publish-panel">
-                        <button class="tool-btn publish-btn" id="publish-btn" onclick="publishSelectedPath()" disabled>发</button>
+                    <div class="publish-panel" id="publish-panel">
+                        <div class="slide-rail" id="slide-rail">
+                            <div class="slide-rail-arrows">
+                                <span class="slide-rail-arrow"></span>
+                                <span class="slide-rail-arrow"></span>
+                                <span class="slide-rail-arrow"></span>
+                            </div>
+                            <div class="slide-thumb disabled" id="slide-thumb">发</div>
+                        </div>
                     </div>
                 </div>
 
@@ -823,7 +867,31 @@
                 scrollEl.innerHTML = html;
             });
 
-            startAutoSend(data);
+            autoSelectFirstPath(data);
+        }
+
+        function autoSelectFirstPath(data) {
+            const buckets = data.buckets || [];
+            let pick = null;
+
+            const b2 = buckets.find(b => b.kfs2_count === 2);
+            if (b2 && b2.paths.length > 0) {
+                pick = { bucket: 2, entry: b2.paths[0], idx: 0 };
+            } else {
+                const b3 = buckets.find(b => b.kfs2_count === 3);
+                if (b3 && b3.paths.length > 0) {
+                    pick = { bucket: 3, entry: b3.paths[0], idx: 0 };
+                }
+            }
+
+            if (!pick) return;
+
+            const summaryEl = document.querySelector(
+                '.path-summary[data-bucket="' + pick.bucket + '"][data-idx="0"]'
+            );
+            if (summaryEl) {
+                selectPath(summaryEl, pick.bucket, 0);
+            }
         }
 
         function onPathClick(summaryEl, bucket, idx) {
@@ -843,11 +911,7 @@
             selectPath(summaryEl, bucket, idx);
         }
 
-        function selectPath(summaryEl, bucket, idx, keepAutoSend) {
-            if (!keepAutoSend) {
-                cancelAutoSend(true);
-            }
-
+        function selectPath(summaryEl, bucket, idx) {
             document.querySelectorAll('.path-summary.selected').forEach(el => {
                 el.classList.remove('selected');
             });
@@ -870,7 +934,7 @@
                 }
             }
 
-            document.getElementById('publish-btn').disabled = false;
+            document.getElementById('slide-thumb').classList.remove('disabled');
             document.getElementById('modify-btn').disabled = false;
             if (selectedPath && selectedPath.detail) {
                 drawPathOnGrid(selectedPath.detail);
@@ -882,7 +946,7 @@
             document.querySelectorAll('.path-summary.selected').forEach(el => {
                 el.classList.remove('selected');
             });
-            document.getElementById('publish-btn').disabled = true;
+            document.getElementById('slide-thumb').classList.add('disabled');
             document.getElementById('modify-btn').disabled = true;
             clearPathOverlay();
         }
@@ -1033,96 +1097,7 @@
                 console.warn('No path selected');
                 return;
             }
-            cancelAutoSend(true);
             publishPath(selectedPath.detail, selectedPath.cost, selectedPath.kfs1);
-        }
-
-        // ========================
-        // 自动发送倒计时
-        // ========================
-        let autoSendTimer = null;
-        let autoSendTarget = null;
-        let autoSendSeconds = 10;
-
-        function startAutoSend(data) {
-            cancelAutoSend(false);
-
-            const buckets = data.buckets || [];
-            let pick = null;
-
-            const b2 = buckets.find(b => b.kfs2_count === 2);
-            if (b2 && b2.paths.length > 0) {
-                pick = { bucket: 2, entry: b2.paths[0] };
-            } else {
-                const b3 = buckets.find(b => b.kfs2_count === 3);
-                if (b3 && b3.paths.length > 0) {
-                    pick = { bucket: 3, entry: b3.paths[0] };
-                }
-            }
-
-            if (!pick) return;
-
-            autoSendTarget = {
-                detail: pick.entry.detail,
-                cost: pick.entry.cost,
-                kfs1: pick.entry.kfs1_affected,
-                bucket: pick.bucket,
-                index: pick.entry.index,
-            };
-            autoSendSeconds = 10;
-
-            document.getElementById('auto-send-toast').classList.remove('hidden');
-            updateToastText();
-
-            const summaryEl = document.querySelector(
-                '.path-summary[data-bucket="' + pick.bucket + '"][data-idx="0"]'
-            );
-            if (summaryEl) {
-                selectPath(summaryEl, pick.bucket, 0, true);
-            }
-
-            autoSendTimer = setInterval(() => {
-                autoSendSeconds--;
-                if (autoSendSeconds <= 0) {
-                    clearInterval(autoSendTimer);
-                    autoSendTimer = null;
-                    executeAutoSend();
-                } else {
-                    updateToastText();
-                }
-            }, 1000);
-        }
-
-        function updateToastText() {
-            if (!autoSendTarget) return;
-            document.getElementById('toast-text').textContent =
-                autoSendSeconds + ' 秒后自动发送 KFS2=' +
-                autoSendTarget.bucket + ' 路径 #' + autoSendTarget.index;
-        }
-
-        function cancelAutoSend(hideToast) {
-            if (autoSendTimer) {
-                clearInterval(autoSendTimer);
-                autoSendTimer = null;
-            }
-            autoSendTarget = null;
-            if (hideToast) {
-                document.getElementById('auto-send-toast').classList.add('hidden');
-            }
-        }
-
-        function sendNow() {
-            if (!autoSendTarget) return;
-            const target = autoSendTarget;
-            cancelAutoSend(true);
-            publishPath(target.detail, target.cost, target.kfs1);
-        }
-
-        function executeAutoSend() {
-            if (!autoSendTarget) return;
-            const target = autoSendTarget;
-            cancelAutoSend(true);
-            publishPath(target.detail, target.cost, target.kfs1);
         }
 
         // ========================
@@ -1327,6 +1302,245 @@
             // 跳转到编辑页面
             window.location.href = 'path_editor.html';
         }
+
+        // ========================
+        // 滑动发送（Slide-to-Send）
+        // ========================
+        (function() {
+            const rail = document.getElementById('slide-rail');
+            const thumb = document.getElementById('slide-thumb');
+            if (!rail || !thumb) return;
+
+            let isDragging = false;
+            let atBottom = false;
+
+            function isDisabled() {
+                return thumb.classList.contains('disabled');
+            }
+
+            function getMaxTop() {
+                return rail.clientHeight - 44;
+            }
+
+            function updatePosition(clientY) {
+                if (isDisabled()) return;
+                const rect = rail.getBoundingClientRect();
+                let top = clientY - rect.top - 22;
+                const maxTop = getMaxTop();
+                top = Math.max(0, Math.min(maxTop, top));
+
+                const nearBottom = (maxTop - top) < 8;
+
+                if (nearBottom && !atBottom) {
+                    // 进入底部：0.2s 从底部向上逐渐扩展
+                    thumb.style.transition = 'top 0.2s ease, height 0.2s ease, border-radius 0.2s ease, font-size 0.2s ease';
+                    thumb.style.top = '0';
+                    thumb.style.height = '100%';
+                    thumb.style.borderRadius = '10px';
+                    thumb.style.fontSize = '20px';
+                    thumb.style.writingMode = 'vertical-rl';
+                    thumb.style.textOrientation = 'upright';
+                    thumb.textContent = '松手发送';
+                    atBottom = true;
+                } else if (!nearBottom && atBottom) {
+                    // 离开底部：0.2s 逐渐收缩
+                    thumb.style.transition = 'height 0.2s ease, border-radius 0.2s ease, font-size 0.2s ease, top 0.1s ease';
+                    thumb.style.height = '44px';
+                    thumb.style.borderRadius = '7px';
+                    thumb.style.fontSize = '20px';
+                    thumb.style.writingMode = 'horizontal-tb';
+                    thumb.style.textOrientation = 'mixed';
+                    thumb.textContent = '发';
+                    thumb.style.top = top + 'px';
+                    atBottom = false;
+                } else if (!nearBottom) {
+                    // 正常拖拽：即时跟随
+                    thumb.style.transition = 'none';
+                    thumb.style.top = top + 'px';
+                    thumb.style.height = '44px';
+                    thumb.style.borderRadius = '7px';
+                    thumb.style.fontSize = '20px';
+                    thumb.style.writingMode = 'horizontal-tb';
+                    thumb.style.textOrientation = 'mixed';
+                    thumb.textContent = '发';
+                }
+            }
+
+            function resetThumb(animate) {
+                if (animate) {
+                    // 松手减速滑回顶部，0.3s
+                    thumb.style.transition = 'top 0.3s cubic-bezier(0.35, 0, 0.25, 1), height 0.2s ease, border-radius 0.2s ease, font-size 0.2s ease';
+                } else {
+                    thumb.style.transition = 'none';
+                }
+                thumb.style.top = '0';
+                thumb.style.height = '44px';
+                thumb.style.borderRadius = '7px';
+                thumb.style.fontSize = '20px';
+                thumb.style.writingMode = 'horizontal-tb';
+                thumb.style.textOrientation = 'mixed';
+                thumb.textContent = '发';
+                atBottom = false;
+            }
+
+            thumb.addEventListener('mousedown', function(e) {
+                if (isDisabled()) return;
+                e.preventDefault();
+                isDragging = true;
+                thumb.style.transition = 'none';
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!isDragging) return;
+                e.preventDefault();
+                updatePosition(e.clientY);
+            });
+
+            document.addEventListener('mouseup', function(e) {
+                if (!isDragging) return;
+                isDragging = false;
+                if (atBottom) {
+                    publishSelectedPath();
+                }
+                resetThumb(true);
+            });
+
+            thumb.addEventListener('touchstart', function(e) {
+                if (isDisabled()) return;
+                e.preventDefault();
+                isDragging = true;
+                thumb.style.transition = 'none';
+            }, { passive: false });
+
+            document.addEventListener('touchmove', function(e) {
+                if (!isDragging) return;
+                e.preventDefault();
+                updatePosition(e.touches[0].clientY);
+            }, { passive: false });
+
+            document.addEventListener('touchend', function(e) {
+                if (!isDragging) return;
+                isDragging = false;
+                if (atBottom) {
+                    publishSelectedPath();
+                }
+                resetThumb(true);
+            });
+        })();
+
+        // ========================
+        // 清除滑动（Clear Slide-to-Send）
+        // ========================
+        (function() {
+            const rail = document.getElementById('clear-slide-rail');
+            const thumb = document.getElementById('clear-slide-thumb');
+            if (!rail || !thumb) return;
+
+            let isDragging = false;
+            let atBottom = false;
+
+            function getMaxTop() {
+                return rail.clientHeight - 44;
+            }
+
+            function updatePosition(clientY) {
+                const rect = rail.getBoundingClientRect();
+                let top = clientY - rect.top - 22;
+                const maxTop = getMaxTop();
+                top = Math.max(0, Math.min(maxTop, top));
+
+                const nearBottom = (maxTop - top) < 8;
+
+                if (nearBottom && !atBottom) {
+                    thumb.style.transition = 'top 0.2s ease, height 0.2s ease, border-radius 0.2s ease, font-size 0.2s ease';
+                    thumb.style.top = '0';
+                    thumb.style.height = '100%';
+                    thumb.style.borderRadius = '10px';
+                    thumb.style.fontSize = '16px';
+                    thumb.style.writingMode = 'vertical-rl';
+                    thumb.style.textOrientation = 'upright';
+                    thumb.textContent = '松手清除';
+                    atBottom = true;
+                } else if (!nearBottom && atBottom) {
+                    thumb.style.transition = 'height 0.2s ease, border-radius 0.2s ease, font-size 0.2s ease, top 0.1s ease';
+                    thumb.style.height = '44px';
+                    thumb.style.borderRadius = '7px';
+                    thumb.style.fontSize = '20px';
+                    thumb.style.writingMode = 'horizontal-tb';
+                    thumb.style.textOrientation = 'mixed';
+                    thumb.textContent = '清';
+                    thumb.style.top = top + 'px';
+                    atBottom = false;
+                } else if (!nearBottom) {
+                    thumb.style.transition = 'none';
+                    thumb.style.top = top + 'px';
+                    thumb.style.height = '44px';
+                    thumb.style.borderRadius = '7px';
+                    thumb.style.fontSize = '20px';
+                    thumb.style.writingMode = 'horizontal-tb';
+                    thumb.style.textOrientation = 'mixed';
+                    thumb.textContent = '清';
+                }
+            }
+
+            function resetThumb(animate) {
+                if (animate) {
+                    thumb.style.transition = 'top 0.3s cubic-bezier(0.35, 0, 0.25, 1), height 0.2s ease, border-radius 0.2s ease, font-size 0.2s ease';
+                } else {
+                    thumb.style.transition = 'none';
+                }
+                thumb.style.top = '0';
+                thumb.style.height = '44px';
+                thumb.style.borderRadius = '7px';
+                thumb.style.fontSize = '20px';
+                thumb.style.writingMode = 'horizontal-tb';
+                thumb.style.textOrientation = 'mixed';
+                thumb.textContent = '清';
+                atBottom = false;
+            }
+
+            thumb.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                isDragging = true;
+                thumb.style.transition = 'none';
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!isDragging) return;
+                e.preventDefault();
+                updatePosition(e.clientY);
+            });
+
+            document.addEventListener('mouseup', function(e) {
+                if (!isDragging) return;
+                isDragging = false;
+                if (atBottom) {
+                    clearGrid();
+                }
+                resetThumb(true);
+            });
+
+            thumb.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                isDragging = true;
+                thumb.style.transition = 'none';
+            }, { passive: false });
+
+            document.addEventListener('touchmove', function(e) {
+                if (!isDragging) return;
+                e.preventDefault();
+                updatePosition(e.touches[0].clientY);
+            }, { passive: false });
+
+            document.addEventListener('touchend', function(e) {
+                if (!isDragging) return;
+                isDragging = false;
+                if (atBottom) {
+                    clearGrid();
+                }
+                resetThumb(true);
+            });
+        })();
 
         // ========================
         // 初始化

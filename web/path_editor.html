@@ -60,10 +60,126 @@
 
         .move-btn  { background-color: #2E7D32; }
         .fetch-btn { background-color: #F9A825; color: #333; }
-        .clear-btn { background-color: #6c757d; }
-        .publish-btn { background-color: #4CAF50; }
-        .publish-btn:disabled { background-color: #ccc; cursor: not-allowed; }
-        .publish-btn:disabled:hover { transform: none; box-shadow: none; opacity: 1; }
+        /* ==================== 滑动发送面板 ==================== */
+        .publish-panel {
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.10);
+            height: 150px;
+        }
+
+        .slide-rail {
+            flex: 1;
+            position: relative;
+            background: #e0e0e0;
+            border-radius: 10px;
+            width: 44px;
+            margin: 0 auto;
+            overflow: hidden;
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.12),
+                        inset -2px -2px 5px rgba(255,255,255,0.7);
+        }
+
+        .slide-rail-arrows {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 10px;
+            height: 56px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-evenly;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .slide-rail-arrow {
+            width: 0;
+            height: 0;
+            border-left: 7px solid transparent;
+            border-right: 7px solid transparent;
+            border-top: 9px solid #bbb;
+        }
+
+        .slide-thumb {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 44px;
+            height: 44px;
+            background-color: #4CAF50;
+            border-radius: 7px;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+            z-index: 2;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        .slide-thumb:active {
+            cursor: grabbing;
+        }
+
+        .slide-thumb.disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            pointer-events: none;
+            box-shadow: none;
+        }
+
+        /* --- 清除滑动 --- */
+        .clear-slide-rail {
+            position: relative;
+            background: #e0e0e0;
+            border-radius: 10px;
+            width: 44px;
+            height: 100px;
+            margin: 0 auto;
+            overflow: hidden;
+            flex-shrink: 0;
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.12),
+                        inset -2px -2px 5px rgba(255,255,255,0.7);
+        }
+
+        .clear-slide-thumb {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 44px;
+            height: 44px;
+            background-color: #6c757d;
+            border-radius: 7px;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+            z-index: 2;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        .clear-slide-thumb:active {
+            cursor: grabbing;
+        }
+
+        .clear-slide-rail .slide-rail-arrows {
+            height: 42px;
+            bottom: 6px;
+        }
 
         /* ==================== ROS 状态 ==================== */
         .ros-status {
@@ -228,14 +344,29 @@
     <div class="app-container">
         <!-- ========== 左侧工具面板 ========== -->
         <div class="tool-panels">
+            <div class="editor-panel">
+                <button class="tool-btn back-btn" onclick="goBack()">返</button>
+            </div>
             <div class="editor-panel" id="editor-panel">
                 <button class="tool-btn move-btn"  id="move-btn"  onclick="activateTool('move')">移</button>
                 <button class="tool-btn fetch-btn" id="fetch-btn" onclick="activateTool('fetch')">抓</button>
-                <button class="tool-btn clear-btn" id="clear-btn" onclick="clearPath()">清</button>
+                <div class="clear-slide-rail" id="clear-slide-rail">
+                    <div class="slide-rail-arrows">
+                        <span class="slide-rail-arrow"></span>
+                        <span class="slide-rail-arrow"></span>
+                    </div>
+                    <div class="clear-slide-thumb" id="clear-slide-thumb">清</div>
+                </div>
             </div>
-            <div class="editor-panel">
-                <button class="tool-btn back-btn" onclick="goBack()">返</button>
-                <button class="tool-btn publish-btn" id="publish-btn" onclick="publishCustomPath()" disabled>发</button>
+            <div class="publish-panel" id="publish-panel">
+                <div class="slide-rail" id="slide-rail">
+                    <div class="slide-rail-arrows">
+                        <span class="slide-rail-arrow"></span>
+                        <span class="slide-rail-arrow"></span>
+                        <span class="slide-rail-arrow"></span>
+                    </div>
+                    <div class="slide-thumb disabled" id="slide-thumb">发</div>
+                </div>
             </div>
         </div>
 
@@ -1463,9 +1594,14 @@
     });
 
     function updatePublishBtn() {
-        const btn = document.getElementById('publish-btn');
+        const thumb = document.getElementById('slide-thumb');
+        if (!thumb) return;
         const hasPath = editorPath.moveNodes.length > 0;
-        btn.disabled = !(rosConnected && hasPath);
+        if (rosConnected && hasPath) {
+            thumb.classList.remove('disabled');
+        } else {
+            thumb.classList.add('disabled');
+        }
     }
 
     function publishCustomPath() {
@@ -1539,6 +1675,245 @@
         // 初始渲染
         setTimeout(() => redrawAll(), 100);
     }
+
+    // ============================================================
+    //  滑动发送（Slide-to-Send）
+    // ============================================================
+    (function() {
+        const rail = document.getElementById('slide-rail');
+        const thumb = document.getElementById('slide-thumb');
+        if (!rail || !thumb) return;
+
+        let isDragging = false;
+        let atBottom = false;
+
+        function isDisabled() {
+            return thumb.classList.contains('disabled');
+        }
+
+        function getMaxTop() {
+            return rail.clientHeight - 44;
+        }
+
+        function updatePosition(clientY) {
+            if (isDisabled()) return;
+            const rect = rail.getBoundingClientRect();
+            let top = clientY - rect.top - 22;
+            const maxTop = getMaxTop();
+            top = Math.max(0, Math.min(maxTop, top));
+
+            const nearBottom = (maxTop - top) < 8;
+
+            if (nearBottom && !atBottom) {
+                // 进入底部：0.2s 从底部向上逐渐扩展
+                thumb.style.transition = 'top 0.2s ease, height 0.2s ease, border-radius 0.2s ease, font-size 0.2s ease';
+                thumb.style.top = '0';
+                thumb.style.height = '100%';
+                thumb.style.borderRadius = '10px';
+                thumb.style.fontSize = '20px';
+                thumb.style.writingMode = 'vertical-rl';
+                thumb.style.textOrientation = 'upright';
+                thumb.textContent = '松手发送';
+                atBottom = true;
+            } else if (!nearBottom && atBottom) {
+                // 离开底部：0.2s 逐渐收缩
+                thumb.style.transition = 'height 0.2s ease, border-radius 0.2s ease, font-size 0.2s ease, top 0.1s ease';
+                thumb.style.height = '44px';
+                thumb.style.borderRadius = '7px';
+                thumb.style.fontSize = '20px';
+                thumb.style.writingMode = 'horizontal-tb';
+                thumb.style.textOrientation = 'mixed';
+                thumb.textContent = '发';
+                thumb.style.top = top + 'px';
+                atBottom = false;
+            } else if (!nearBottom) {
+                // 正常拖拽：即时跟随
+                thumb.style.transition = 'none';
+                thumb.style.top = top + 'px';
+                thumb.style.height = '44px';
+                thumb.style.borderRadius = '7px';
+                thumb.style.fontSize = '20px';
+                thumb.style.writingMode = 'horizontal-tb';
+                thumb.style.textOrientation = 'mixed';
+                thumb.textContent = '发';
+            }
+        }
+
+        function resetThumb(animate) {
+            if (animate) {
+                // 松手减速滑回顶部，0.3s
+                thumb.style.transition = 'top 0.3s cubic-bezier(0.35, 0, 0.25, 1), height 0.2s ease, border-radius 0.2s ease, font-size 0.2s ease';
+            } else {
+                thumb.style.transition = 'none';
+            }
+            thumb.style.top = '0';
+            thumb.style.height = '44px';
+            thumb.style.borderRadius = '7px';
+            thumb.style.fontSize = '20px';
+            thumb.style.writingMode = 'horizontal-tb';
+            thumb.style.textOrientation = 'mixed';
+            thumb.textContent = '发';
+            atBottom = false;
+        }
+
+        thumb.addEventListener('mousedown', function(e) {
+            if (isDisabled()) return;
+            e.preventDefault();
+            isDragging = true;
+            thumb.style.transition = 'none';
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            updatePosition(e.clientY);
+        });
+
+        document.addEventListener('mouseup', function(e) {
+            if (!isDragging) return;
+            isDragging = false;
+            if (atBottom) {
+                publishCustomPath();
+            }
+            resetThumb(true);
+        });
+
+        thumb.addEventListener('touchstart', function(e) {
+            if (isDisabled()) return;
+            e.preventDefault();
+            isDragging = true;
+            thumb.style.transition = 'none';
+        }, { passive: false });
+
+        document.addEventListener('touchmove', function(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            updatePosition(e.touches[0].clientY);
+        }, { passive: false });
+
+        document.addEventListener('touchend', function(e) {
+            if (!isDragging) return;
+            isDragging = false;
+            if (atBottom) {
+                publishCustomPath();
+            }
+            resetThumb(true);
+        });
+    })();
+
+    // ============================================================
+    //  清除滑动（Clear Slide-to-Send）
+    // ============================================================
+    (function() {
+        const rail = document.getElementById('clear-slide-rail');
+        const thumb = document.getElementById('clear-slide-thumb');
+        if (!rail || !thumb) return;
+
+        let isDragging = false;
+        let atBottom = false;
+
+        function getMaxTop() {
+            return rail.clientHeight - 44;
+        }
+
+        function updatePosition(clientY) {
+            const rect = rail.getBoundingClientRect();
+            let top = clientY - rect.top - 22;
+            const maxTop = getMaxTop();
+            top = Math.max(0, Math.min(maxTop, top));
+
+            const nearBottom = (maxTop - top) < 8;
+
+            if (nearBottom && !atBottom) {
+                thumb.style.transition = 'top 0.2s ease, height 0.2s ease, border-radius 0.2s ease, font-size 0.2s ease';
+                thumb.style.top = '0';
+                thumb.style.height = '100%';
+                thumb.style.borderRadius = '10px';
+                thumb.style.fontSize = '16px';
+                thumb.style.writingMode = 'vertical-rl';
+                thumb.style.textOrientation = 'upright';
+                thumb.textContent = '松手清除';
+                atBottom = true;
+            } else if (!nearBottom && atBottom) {
+                thumb.style.transition = 'height 0.2s ease, border-radius 0.2s ease, font-size 0.2s ease, top 0.1s ease';
+                thumb.style.height = '44px';
+                thumb.style.borderRadius = '7px';
+                thumb.style.fontSize = '20px';
+                thumb.style.writingMode = 'horizontal-tb';
+                thumb.style.textOrientation = 'mixed';
+                thumb.textContent = '清';
+                thumb.style.top = top + 'px';
+                atBottom = false;
+            } else if (!nearBottom) {
+                thumb.style.transition = 'none';
+                thumb.style.top = top + 'px';
+                thumb.style.height = '44px';
+                thumb.style.borderRadius = '7px';
+                thumb.style.fontSize = '20px';
+                thumb.style.writingMode = 'horizontal-tb';
+                thumb.style.textOrientation = 'mixed';
+                thumb.textContent = '清';
+            }
+        }
+
+        function resetThumb(animate) {
+            if (animate) {
+                thumb.style.transition = 'top 0.3s cubic-bezier(0.35, 0, 0.25, 1), height 0.2s ease, border-radius 0.2s ease, font-size 0.2s ease';
+            } else {
+                thumb.style.transition = 'none';
+            }
+            thumb.style.top = '0';
+            thumb.style.height = '44px';
+            thumb.style.borderRadius = '7px';
+            thumb.style.fontSize = '20px';
+            thumb.style.writingMode = 'horizontal-tb';
+            thumb.style.textOrientation = 'mixed';
+            thumb.textContent = '清';
+            atBottom = false;
+        }
+
+        thumb.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            isDragging = true;
+            thumb.style.transition = 'none';
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            updatePosition(e.clientY);
+        });
+
+        document.addEventListener('mouseup', function(e) {
+            if (!isDragging) return;
+            isDragging = false;
+            if (atBottom) {
+                clearPath();
+            }
+            resetThumb(true);
+        });
+
+        thumb.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            isDragging = true;
+            thumb.style.transition = 'none';
+        }, { passive: false });
+
+        document.addEventListener('touchmove', function(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            updatePosition(e.touches[0].clientY);
+        }, { passive: false });
+
+        document.addEventListener('touchend', function(e) {
+            if (!isDragging) return;
+            isDragging = false;
+            if (atBottom) {
+                clearPath();
+            }
+            resetThumb(true);
+        });
+    })();
 
     init();
     </script>
