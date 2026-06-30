@@ -52,10 +52,8 @@ HEIGHT_MAP_RED = np.array([
     [  0,   0,   0],
 ], dtype=int)
 
-MOVE_COST = 2
-TURN_COST = 1
-FETCH_KFS2_COST = 4
 METHOD = 1          # 1 = unidirectional
+# 代价模型：高度差+抓取（上+200:2.5s 上+400:4.0s 下-200:3.5s 下-400:5.0s 抓取:4.0s）
 START_Y = [0, 1, 2]
 GRID_ROWS = 6
 GRID_COLS = 3
@@ -149,12 +147,12 @@ def enumerate_valid_grids():
 # ===================================================================
 
 class BatchDFSPlanner(DFSPlanner):
-    """DFSPlanner subclass that only evaluates kfs2_indicated=2 and 3."""
+    """DFSPlanner subclass that evaluates kfs2_indicated=2, 3, and 4."""
 
     def plan_path(self, sty):
         self.path = [[], [], [], [], []]
         for y in sty:
-            for i in (2, 3):
+            for i in (2, 3, 4):
                 self.visited = np.zeros((self.GRID_ROWS, self.GRID_COLS), dtype=bool)
                 self.cnt_path.clear()
                 self.eval_path.clear()
@@ -175,23 +173,24 @@ def _plan_worker(args):
         GRID_COLS, GRID_ROWS, grid,
         HEIGHT_MAP_RED,
         method=METHOD,
-        move_cost=MOVE_COST,
-        turn_cost=TURN_COST,
-        fetch_kfs2_cost=FETCH_KFS2_COST,
     )
     planner.plan_path(START_Y)
 
     best_2 = planner.path[2][0] if planner.path[2] else None
     best_3 = planner.path[3][0] if planner.path[3] else None
+    best_4 = planner.path[4][0] if planner.path[4] else None
 
     return {
         'grid': grid_list,
         'cost_2': best_2[1] if best_2 else float('inf'),
         'cost_3': best_3[1] if best_3 else float('inf'),
+        'cost_4': best_4[1] if best_4 else float('inf'),
         'kfs1_2': len(best_2[3]) if best_2 else 0,
         'kfs1_3': len(best_3[3]) if best_3 else 0,
+        'kfs1_4': len(best_4[3]) if best_4 else 0,
         'steps_2': len(best_2[0]) if best_2 else 0,
         'steps_3': len(best_3[0]) if best_3 else 0,
+        'steps_4': len(best_4[0]) if best_4 else 0,
     }
 
 
@@ -214,8 +213,9 @@ def print_ranking_summary(worst_list, label, cost_key='cost_2', kfs1_key='kfs1_2
     print(f"{'Rank':<6} {'Cost':<8} {'KFS1 aff.':<10} {'Steps':<8}")
     print(f"{'-'*32}")
     for i, r in enumerate(worst_list):
-        steps_key = 'steps_2' if cost_key == 'cost_2' else 'steps_3'
-        print(f"{i+1:<6} {r[cost_key]:<8} {r[kfs1_key]:<10} {r[steps_key]:<8}")
+        suffix = cost_key.split('_', 1)[1]
+        steps_key = f'steps_{suffix}'
+        print(f"{i+1:<6} {r[cost_key]:<8.1f} {r[kfs1_key]:<10} {r[steps_key]:<8}")
 
 
 # ===================================================================
@@ -276,8 +276,8 @@ def _scheme_block(rank_info, cost, kfs1_count, target_kfs2):
     label = rank_info.get('label', '')
     tikz = _tikz_grid(grid_list)
 
-    # One-line annotation, e.g.  "#01 cost=28, k1=2"
-    annotation = f'{label} cost={cost}, k1={kfs1_count}'
+    # One-line annotation, e.g.  "#01 cost=28.0, k1=2"
+    annotation = f'{label} cost={cost:.1f}, k1={kfs1_count}'
 
     return (
         r'\begin{minipage}[t]{0.32\textwidth}' + '\n'
@@ -288,7 +288,7 @@ def _scheme_block(rank_info, cost, kfs1_count, target_kfs2):
     )
 
 
-def generate_tex(worst_2, worst_3, output_path):
+def generate_tex(worst_2, worst_3, worst_4, output_path):
     """Generate the full LaTeX file.
 
     Layout: 5 rows × 3 cols per page = 15 schemes/page.
@@ -298,6 +298,8 @@ def generate_tex(worst_2, worst_3, output_path):
     for i, r in enumerate(worst_2):
         r['label'] = f'\\#{{{i+1:02d}}}'
     for i, r in enumerate(worst_3):
+        r['label'] = f'\\#{{{i+1:02d}}}'
+    for i, r in enumerate(worst_4):
         r['label'] = f'\\#{{{i+1:02d}}}'
 
     def _write_section(lines_out, items, cost_key, kfs1_key, target_kfs2):
@@ -352,6 +354,12 @@ def generate_tex(worst_2, worst_3, output_path):
     lines.append(r'\section*{Worst 30 KFS Placements --- 3 KFS2 Collection}')
     lines.append(r'\vspace{1mm}')
     _write_section(lines, worst_3, 'cost_3', 'kfs1_3', 3)
+
+    # ---- Section 3: Worst-30 for 4 KFS2 ----
+    lines.append(r'\newpage')
+    lines.append(r'\section*{Worst 30 KFS Placements --- 4 KFS2 Collection}')
+    lines.append(r'\vspace{1mm}')
+    _write_section(lines, worst_4, 'cost_4', 'kfs1_4', 4)
 
     lines.append(r'\end{document}')
 
@@ -412,16 +420,21 @@ def main():
 
     feasible_2 = sum(1 for r in results if r['cost_2'] < float('inf'))
     feasible_3 = sum(1 for r in results if r['cost_3'] < float('inf'))
+    feasible_4 = sum(1 for r in results if r['cost_4'] < float('inf'))
     print(f"  Feasible 2-KFS2: {feasible_2}/{len(results)} "
           f"({100 * feasible_2 / len(results):.1f}%)")
     print(f"  Feasible 3-KFS2: {feasible_3}/{len(results)} "
           f"({100 * feasible_3 / len(results):.1f}%)")
+    print(f"  Feasible 4-KFS2: {feasible_4}/{len(results)} "
+          f"({100 * feasible_4 / len(results):.1f}%)")
 
     worst_2 = rank_results(results, 'cost_2', 'kfs1_2', top_n=30)
     worst_3 = rank_results(results, 'cost_3', 'kfs1_3', top_n=30)
+    worst_4 = rank_results(results, 'cost_4', 'kfs1_4', top_n=30)
 
     print_ranking_summary(worst_2, "2-KFS2 collection", 'cost_2', 'kfs1_2')
     print_ranking_summary(worst_3, "3-KFS2 collection", 'cost_3', 'kfs1_3')
+    print_ranking_summary(worst_4, "4-KFS2 collection", 'cost_4', 'kfs1_4')
 
     # ---- Step 4: Save & TeX ----
     print("\n[4/4] Saving results and generating TeX ...")
@@ -431,16 +444,18 @@ def main():
     save_data = {
         'worst_30_for_2': worst_2,
         'worst_30_for_3': worst_3,
+        'worst_30_for_4': worst_4,
         'total_grids': len(grids),
         'feasible_2': feasible_2,
         'feasible_3': feasible_3,
+        'feasible_4': feasible_4,
     }
     with open(json_path, 'w') as f:
         json.dump(save_data, f, indent=2, ensure_ascii=False)
     print(f"  JSON saved to: {json_path}")
 
     tex_path = os.path.join(OUTPUT_DIR, 'kfs_placement_analysis.tex')
-    generate_tex(worst_2, worst_3, tex_path)
+    generate_tex(worst_2, worst_3, worst_4, tex_path)
 
     print(f"\n{'='*60}")
     print(f"  Done!")

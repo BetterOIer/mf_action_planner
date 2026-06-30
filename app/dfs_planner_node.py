@@ -32,13 +32,9 @@ class DFSPlannerNode(Node):
         self.GRID_ROWS = int(self.get_parameter('grid_rows').value)
         self.GRID_COLS = int(self.get_parameter('grid_cols').value)
 
-        # ---- DFS 代价权重 ----
-        self.declare_parameter('move_cost', 2)
-        self.declare_parameter('turn_cost', 1)
-        self.declare_parameter('fetch_kfs2_cost', 4)
-        self.MOVE_COST = int(self.get_parameter('move_cost').value)
-        self.TURN_COST = int(self.get_parameter('turn_cost').value)
-        self.FETCH_KFS2_COST = int(self.get_parameter('fetch_kfs2_cost').value)
+        # ---- 代价模型（高度差 + 抓取） ----
+        # 上+200mm:2.5s 上+400mm:4.0s  下-200mm:3.5s  下-400mm:5.0s  抓取:4.0s
+        # move_cost / turn_cost 保留仅为兼容旧配置，实际不再使用
 
         # ---- 默认值 ----
         self.declare_parameter('default_team', 'red')
@@ -137,9 +133,6 @@ class DFSPlannerNode(Node):
             height_map,
             method=self.current_method,
             logger=self.get_logger(),
-            move_cost=self.MOVE_COST,
-            turn_cost=self.TURN_COST,
-            fetch_kfs2_cost=self.FETCH_KFS2_COST,
         )
         self.get_logger().info(f'=== Planning from start_y={self.start_y} ===')
         path = planner.plan_path(self.start_y)
@@ -154,7 +147,7 @@ class DFSPlannerNode(Node):
             for i in range(n):
                 p, cost, kfs2_cnt, kfs1_list = bucket[i]
                 self.get_logger().info(
-                    f'  #{i+1}: cost={cost}, kfs1_affected={len(kfs1_list)}, '
+                    f'  #{i+1}: cost={cost:.1f}, kfs1_affected={len(kfs1_list)}, '
                     f'steps={len(p)}'
                 )
                 for idx, step in enumerate(p):

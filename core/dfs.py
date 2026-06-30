@@ -11,9 +11,20 @@ DFS路径规划算法核心实现
 3. 必经之路上穿过了所有4个kfs2的路径不考虑。(默认R2不具备捡起kfs2扔到一边的功能，捡起了一定拿下，而R2上放不下4个kfs2)
 4. 拿到小于2个kfs2的路径不考虑。
 
-路径评估：
+路径评估（机械结构调整后）：
 
-第一优先：路径的代价=移动代价+转向代价+精细调整+捡起kfs2代价
+代价 = 台阶高度差耗时 + 抓取耗时
+  - 平层移动: 1.0s
+  - 上+200mm台阶: 2.5s   上+400mm台阶: 4.0s
+  - 下-200mm台阶: 3.5s   下-400mm台阶: 5.0s
+  - 抓取 KFS2: 4.0s
+
+移动模型：
+  - 单向模式 (method=1)：无独立转向步。抓取步自带新朝向，后续所有 move 步
+    沿用此朝向，直到下一次抓取改变朝向。
+  - 全向模式 (method=0)：朝向恒为 0。
+
+第一优先：路径的代价（越低越好）
 第二优先：受影响的kfs1数量（越少越好）
 第三优先：取到kfs2的数量 2个优先于3个
 
@@ -24,10 +35,26 @@ import math
 
 import numpy as np
 
+# ------------------------------------------------------------------
+# 代价常量
+# ------------------------------------------------------------------
+_FETCH_COST = 4.0
+
+# 高度差 → 耗时 (s) 映射
+_DH_COST = {
+    0:   1.0,   # 平层移动
+    200: 2.5,   # 上+200mm
+    400: 4.0,   # 上+400mm
+    -200: 3.5,  # 下-200mm
+    -400: 5.0,  # 下-400mm
+}
+
 
 class DFSPlanner:
     def __init__(self, grid_cols, grid_rows, grid, kfs_grid_height,
-                 method=1, logger=None, move_cost=2, turn_cost=1, fetch_kfs2_cost=4):
+                 method=1, logger=None,
+                 move_cost=2, turn_cost=1, fetch_kfs2_cost=4):
+        """move_cost / turn_cost 保留仅为兼容旧调用，实际不再使用。"""
         self.logger = logger
         self.GRID_ROWS = grid_rows
         self.GRID_COLS = grid_cols
@@ -38,32 +65,26 @@ class DFSPlanner:
         self.GRID = grid
         self.kfs_grid_height = kfs_grid_height
         self.visited = np.zeros((self.GRID_ROWS, self.GRID_COLS), dtype=bool)
-        self.kfs2_indicated=0
+        self.kfs2_indicated = 0
         self.path = [[], [], [], [], []]
         self.cnt_path = []
         self.eval_path = []
-
-        self.MOVE_COST = move_cost
-        self.TURN_COST = turn_cost
-        self.FETCH_KFS2_COST = fetch_kfs2_cost
-
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def plan_path(self, sty):
-        """DFS路径规划 — 返回最优路径 或 None"""
+        """DFS路径规划 — 返回各 kfs2 数量（0-4）的最优路径列表"""
 
-        # 重置状态
         self.path = [[], [], [], [], []]
-        
+
         for y in sty:
             for i in range(5):
                 self.visited = np.zeros((self.GRID_ROWS, self.GRID_COLS), dtype=bool)
                 self.cnt_path.clear()
                 self.eval_path.clear()
-                self.kfs2_indicated=i
+                self.kfs2_indicated = i
                 self._dfs(0, y, 0)
 
         return self.path
@@ -75,7 +96,9 @@ class DFSPlanner:
     def _dfs(self, posX, posY, yaw):
         if posX == 5:
             h = float(self.kfs_grid_height[posX][posY])
-            self.cnt_path.append([0, float(posX), float(posY), h, self.method*float(yaw), 0.0, 0.0, 0.0])
+            self.cnt_path.append(
+                [0, float(posX), float(posY), h, self.method * float(yaw), 0.0, 0.0, 0.0]
+            )
             self._copy_path(self.cnt_path, self.eval_path)
             self._evaluate_path()
             self.cnt_path.pop()
@@ -83,8 +106,10 @@ class DFSPlanner:
 
         self.visited[posX][posY] = True
         h = float(self.kfs_grid_height[posX][posY])
-        self.cnt_path.append([0, float(posX), float(posY), h, self.method*float(yaw), 0.0, 0.0, 0.0])
-        
+        self.cnt_path.append(
+            [0, float(posX), float(posY), h, self.method * float(yaw), 0.0, 0.0, 0.0]
+        )
+
         for direction in self.DIRECTIONS:
             newX = posX + direction[0]
             newY = posY + direction[1]
@@ -122,7 +147,7 @@ class DFSPlanner:
         kfs2_needed_in_first_row = 0
         kfs2_needed = 0
         if 2 in self.GRID[1]:
-            kfs2_needed_in_first_row=1
+            kfs2_needed_in_first_row = 1
 
         grid_cnt = self.GRID.copy()
 
@@ -169,7 +194,7 @@ class DFSPlanner:
         # ---- 6. 计算需要取的 kfs2 数量 ----
         kfs2_by_the_way_needed = 0
         kfs2_can_get_needed = 0
-            
+
         kfs2_by_the_way_needed = max(0, min(
             self.kfs2_indicated - len(kfs2_on_the_way),
             len(kfs2_by_the_way),
@@ -183,25 +208,31 @@ class DFSPlanner:
         del kfs2_can_get[kfs2_can_get_needed:]
         kfs2_needed += len(kfs2_on_the_way) + kfs2_by_the_way_needed + kfs2_can_get_needed
 
-
         # ---- 7. 可行性检查 ----
         if kfs2_needed != self.kfs2_indicated:
             return
 
-        # ---- 8. 构建输出路径（纯 grid 索引，无坐标转换） ----
+        # ---- 8. 构建输出路径 ----
         pub_path = []
+        # 单向模式：跟踪上次抓取后的朝向，后续 move 步沿用此朝向直到下次抓取
+        effective_yaw = 0.0
 
         for i, step in enumerate(self.eval_path):
             grid_row = round(step[1])
             grid_col = round(step[2])
 
             move_h = float(self.kfs_grid_height[grid_row][grid_col])
-            pub_path.append([0, grid_row, grid_col, move_h, step[4], 0, 0, 0])
+            if self.method == 0:
+                move_yaw = 0.0
+            else:
+                move_yaw = effective_yaw
+
+            pub_path.append([0, grid_row, grid_col, move_h, move_yaw, 0, 0, 0])
 
             extra_steps = []
             next_step = self.eval_path[i + 1] if i + 1 < len(self.eval_path) else None
 
-            # 朝向刚好有的 kfs2
+            # ---- 朝向刚好有的 kfs2（方向与当前朝向一致） ----
             now_dir = self._get_dir_idx(step[4])
             nx = round(step[1]) + self.DIRECTIONS[now_dir][0]
             ny = round(step[2]) + self.DIRECTIONS[now_dir][1]
@@ -209,9 +240,12 @@ class DFSPlanner:
                     and kfs2_by_the_way[0] == [nx, ny]):
                 nr, nc = kfs2_by_the_way.pop(0)
                 h = self.kfs_grid_height[nr][nc] - self.kfs_grid_height[round(step[1])][round(step[2])]
-                extra_steps.insert(0, [1, nr, nc, h, step[4], 0, 0, 0])
+                fetch_yaw = 0.0 if self.method == 0 else step[4]
+                extra_steps.insert(0, [1, nr, nc, h, fetch_yaw, 0, 0, 0])
+                if self.method == 1:
+                    effective_yaw = step[4]
 
-            # 通过转向能拿到的 kfs2
+            # ---- 通过转向能拿到的 kfs2 ----
             for direction in self.DIRECTIONS:
                 if not kfs2_can_get:
                     break
@@ -221,25 +255,23 @@ class DFSPlanner:
                         and kfs2_can_get[0] == [nx, ny]):
                     nr, nc = kfs2_can_get.pop(0)
                     h = self.kfs_grid_height[nr][nc] - self.kfs_grid_height[round(step[1])][round(step[2])]
-                    extra_steps.append([1, nr, nc, h, direction[2], 0, 0, 0])
-            
-            # 必经之路上的 kfs2 — 在到达下一步之前抓取
+                    # 抓取步自带新朝向，不另加转向步
+                    fetch_yaw = 0.0 if self.method == 0 else direction[2]
+                    extra_steps.append([1, nr, nc, h, fetch_yaw, 0, 0, 0])
+                    if self.method == 1:
+                        effective_yaw = direction[2]
+
+            # ---- 必经之路上的 kfs2 — 在到达下一步之前抓取 ----
             if (kfs2_on_the_way and next_step is not None
                     and kfs2_on_the_way[0] == [round(next_step[1]), round(next_step[2])]):
                 nr, nc = kfs2_on_the_way.pop(0)
                 h = self.kfs_grid_height[nr][nc] - self.kfs_grid_height[round(step[1])][round(step[2])]
-                extra_steps.append([1, nr, nc, h, next_step[4], 0, 0, 0])
+                fetch_yaw = 0.0 if self.method == 0 else next_step[4]
+                extra_steps.append([1, nr, nc, h, fetch_yaw, 0, 0, 0])
+                if self.method == 1:
+                    effective_yaw = next_step[4]
 
             pub_path.extend(extra_steps)
-
-            # ---- 转向：如果下一步方向与当前不同，原地转向 ----
-            if (self.method == 1
-                    and next_step is not None
-                    and step[4] != next_step[4]):
-                turn_h = float(self.kfs_grid_height[grid_row][grid_col])
-                pub_path.append([
-                    0, grid_row, grid_col, turn_h, next_step[4], 0, 0, 0
-                ])
 
         # ---- 9. 首排 kfs2 未取则进入 grid 即无效 ----
         if kfs2_needed_in_first_row != 0:
@@ -250,19 +282,20 @@ class DFSPlanner:
                 if step[0] == 1:
                     grabbed = True
 
-        # ---- 10. 计算代价 ----
-        cost = 0
-        for i, step in enumerate(pub_path):
-            pre = pub_path[i - 1] if i > 0 else None
-            if pre is not None and step[4] != pre[4] and self.method==1:
-                cost += self.TURN_COST
-            if pre is not None and (pre[1] != step[1] or pre[2] != step[2]):
-                cost += self.MOVE_COST
+        # ---- 10. 计算代价（高度差 + 抓取） ----
+        cost = 0.0
+        last_x, last_y, last_h = 0.0, float(round(self.eval_path[0][2])), 0.0
+        for step in pub_path:
             if step[0] == 1:
-                cost += self.FETCH_KFS2_COST
+                cost += _FETCH_COST
+            elif step[0] == 0:
+                sx, sy, sh = step[1], step[2], step[3]
+                if abs(sx - last_x) > 1e-6 or abs(sy - last_y) > 1e-6:
+                    dh = int(round(sh - last_h))
+                    cost += _DH_COST.get(dh, 1.0)
+                    last_x, last_y, last_h = sx, sy, sh
 
         self._add_path(pub_path, cost, kfs2_needed, kfs1_on_the_way)
-
 
     # ------------------------------------------------------------------
     # 路径存储与排序

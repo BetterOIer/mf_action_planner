@@ -455,61 +455,38 @@
     }
 
     /** 构建完整动作序列 [ [action,x,y,z_or_dh,yaw,0,0,0], ... ]
-     *  规则：在下一步方向与当前有效方向不同时，
-     *  在上一个 move 位置插入一个原地转向步，方向=下一步目标方向。
-     *  「当前有效方向」会追踪 fetch 后的朝向，因此 fetch 后如需改变朝向
-     *  去往下一个 move，也会正确插入转向步。 */
+     *  规则：
+     *  - 全向模式：朝向恒为 0。
+     *  - 单向模式：无独立转向步。抓取步自带新朝向，后续所有 move 步
+     *    沿用此朝向直到下一次抓取改变。 */
     function buildActionSequence() {
         const seq = [];
         const isUni = (method === 1);
 
-        let prevMoveNode = null;
-        let lastEffectiveYaw = null;   // 最后一个动作执行后机器人的朝向
+        let effectiveYaw = 0;   // 当前有效朝向（仅单向模式）
         let node = getChainHead();
         while (node) {
-            const nextNode = node.nextId ? getMoveNodeById(node.nextId) : null;
             const z = getHeight(node.x, node.y);
 
-            // --- 计算到达本 move 节点的朝向 ---
-            let arrivalYaw;
-            if (isUni) {
-                if (prevMoveNode) {
-                    arrivalYaw = calcYaw(prevMoveNode.x, prevMoveNode.y, node.x, node.y);
-                } else if (nextNode) {
-                    // 首节点：朝向下一个节点
-                    arrivalYaw = calcYaw(node.x, node.y, nextNode.x, nextNode.y);
-                } else {
-                    arrivalYaw = 0;
-                }
-            } else {
-                arrivalYaw = 0;
-            }
+            // move 步 — 使用当前有效朝向
+            const moveYaw = isUni ? parseFloat(effectiveYaw.toFixed(4)) : 0;
+            seq.push([0, node.x, node.y, z, moveYaw, 0, 0, 0]);
 
-            // --- 转向步：上个有效朝向 ≠ 本次到达朝向时，在上一个 move 位置原地转向 ---
-            if (isUni && prevMoveNode && lastEffectiveYaw !== null
-                && Math.abs(lastEffectiveYaw - arrivalYaw) > 1e-6) {
-                const prevZ = getHeight(prevMoveNode.x, prevMoveNode.y);
-                seq.push([0, prevMoveNode.x, prevMoveNode.y, prevZ,
-                          parseFloat(arrivalYaw.toFixed(4)), 0, 0, 0]);
-            }
-
-            // --- move 步 ---
-            seq.push([0, node.x, node.y, z, parseFloat(arrivalYaw.toFixed(4)), 0, 0, 0]);
-            lastEffectiveYaw = arrivalYaw;
-
-            // --- fetch 步子节点 ---
+            // fetch 步子节点
             (node.fetchIds || []).forEach(fid => {
                 const f = getFetchNodeById(fid);
                 if (!f) return;
                 const fz = getHeight(f.x, f.y);
                 const dh = fz - z;
                 const fyaw = calcYaw(node.x, node.y, f.x, f.y);
-                seq.push([1, f.x, f.y, dh, parseFloat(fyaw.toFixed(4)), 0, 0, 0]);
-                lastEffectiveYaw = fyaw;   // fetch 后机器人朝向 fetch 目标
+
+                // 抓取步自带朝向，更新有效朝向
+                const outYaw = isUni ? parseFloat(fyaw.toFixed(4)) : 0;
+                seq.push([1, f.x, f.y, dh, outYaw, 0, 0, 0]);
+                if (isUni) effectiveYaw = fyaw;
             });
 
-            prevMoveNode = node;
-            node = nextNode;
+            node = node.nextId ? getMoveNodeById(node.nextId) : null;
         }
         return seq;
     }

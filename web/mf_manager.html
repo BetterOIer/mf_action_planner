@@ -848,7 +848,7 @@
                     html += '<span class="arrow">▶</span>';
                     html += '<span class="summary-idx">#' + entry.index + '</span>';
                     html += '<span class="summary-steps">' + entry.steps + ' 步</span>';
-                    html += '<span class="summary-cost">消耗' + entry.cost + '</span>';
+                    html += '<span class="summary-cost">消耗' + Number(entry.cost).toFixed(1) + '</span>';
                     html += '<span class="summary-kfs1">K1×' + entry.kfs1_affected + '</span>';
                     html += '</div>';
 
@@ -1085,7 +1085,7 @@
             });
 
             actionSeqPublisher.publish(msg);
-            const label = (cost !== undefined && cost !== null) ? (' | 消耗' + cost) : '';
+            const label = (cost !== undefined && cost !== null) ? (' | 消耗' + Number(cost).toFixed(1)) : '';
             setRosStatus('已发送 ' + numSteps + ' 步' + label, '#4CAF50');
             setTimeout(() => {
                 setRosStatus('ROS: 已连接', '#43A047');
