@@ -60,6 +60,11 @@
 
         .move-btn  { background-color: #2E7D32; }
         .fetch-btn { background-color: #F9A825; color: #333; }
+
+        .monitor-btn {
+            background-color: #4CAF50;
+            margin-top: 6px;
+        }
         /* ==================== 滑动发送面板 ==================== */
         .publish-panel {
             display: flex;
@@ -68,7 +73,7 @@
             background: white;
             border-radius: 10px;
             box-shadow: 2px 2px 10px rgba(0,0,0,0.10);
-            height: 150px;
+            height: 200px;
         }
 
         .slide-rail {
@@ -367,6 +372,7 @@
                     </div>
                     <div class="slide-thumb disabled" id="slide-thumb">发</div>
                 </div>
+                <button class="tool-btn monitor-btn" onclick="openMonitor()">监</button>
             </div>
         </div>
 
@@ -1611,6 +1617,11 @@
                 setRosStatus('ROS: 已连接', '#43A047');
             }
         }, 3000);
+    }
+
+    function openMonitor() {
+        const t = team || 'red';
+        window.open('../../r2_monitor/web/r2_monitor.html?team=' + t, '_blank');
     }
 
     function goBack() {

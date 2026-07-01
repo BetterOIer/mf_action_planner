@@ -57,7 +57,7 @@
             background: white;
             border-radius: 10px;
             box-shadow: 2px 2px 10px rgba(0,0,0,0.10);
-            height: 150px;
+            height: 200px;
         }
 
         .slide-rail {
@@ -230,6 +230,11 @@
         .random-btn {
             background-color: #FF9800;
             margin-top: 4px;
+        }
+
+        .monitor-btn {
+            background-color: #4CAF50;
+            margin-top: 6px;
         }
 
         /* ==================== 中间内容区域 ==================== */
@@ -643,6 +648,7 @@
                             </div>
                             <div class="slide-thumb disabled" id="slide-thumb">发</div>
                         </div>
+                        <button class="tool-btn monitor-btn" onclick="openMonitor()">监</button>
                     </div>
                 </div>
 
@@ -1301,6 +1307,11 @@
             sessionStorage.setItem('mf_path_editor_data', JSON.stringify(transferData));
             // 跳转到编辑页面
             window.location.href = 'path_editor.html';
+        }
+
+        function openMonitor() {
+            const team = currentTeam || 'red';
+            window.open('../../r2_monitor/web/r2_monitor.html?team=' + team, '_blank');
         }
 
         // ========================
