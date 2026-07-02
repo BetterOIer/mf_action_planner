@@ -538,7 +538,7 @@
         if (!robotPose || robotPose.outlier) return;
 
         const rp = W(robotPose.x, robotPose.y, cfg, scale, leftM, topM);
-        const r = Math.max(5, 10 * scale * 1000);  // 根据比例自适应
+        const r = Math.max(6, 200 * scale);  // 机器人半径 ~200mm → 像素，随画布缩放
 
         // 朝向箭头（竖版 canvas）
         if (robotPose.yaw !== null) {
