@@ -257,6 +257,39 @@
                     <span class="status-label">数据状态</span>
                     <span><span class="status-indicator indicator-idle" id="ind-data"></span><span class="status-value" id="val-data">等待数据</span></span>
                 </div>
+                <div class="section-title" style="margin-top:4px;">/sensor_distances</div>
+                <div class="status-row">
+                    <span class="status-label">传感器1</span>
+                    <span><span class="status-indicator indicator-idle" id="ind-s0"></span><span class="status-value" id="val-s0">--</span></span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">传感器2</span>
+                    <span><span class="status-indicator indicator-idle" id="ind-s1"></span><span class="status-value" id="val-s1">--</span></span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">传感器3</span>
+                    <span><span class="status-indicator indicator-idle" id="ind-s2"></span><span class="status-value" id="val-s2">--</span></span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">传感器4</span>
+                    <span><span class="status-indicator indicator-idle" id="ind-s3"></span><span class="status-value" id="val-s3">--</span></span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">传感器5</span>
+                    <span><span class="status-indicator indicator-idle" id="ind-s4"></span><span class="status-value" id="val-s4">--</span></span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">传感器6</span>
+                    <span><span class="status-indicator indicator-idle" id="ind-s5"></span><span class="status-value" id="val-s5">--</span></span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">传感器7</span>
+                    <span><span class="status-indicator indicator-idle" id="ind-s6"></span><span class="status-value" id="val-s6">--</span></span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">传感器8</span>
+                    <span><span class="status-indicator indicator-idle" id="ind-s7"></span><span class="status-value" id="val-s7">--</span></span>
+                </div>
             </div>
         </div>
     </div>
@@ -409,6 +442,49 @@
         updateStatusPanel();
         if (currentTeam) drawField();
     });
+
+    // 订阅 /sensor_distances (std_msgs/Float32MultiArray)
+    let sensorDistances = [];   // 8 个传感器的距离，NaN 表示无效
+
+    const sensorSub = new ROSLIB.Topic({
+        ros: ros,
+        name: '/sensor_distances',
+        messageType: 'std_msgs/Float32MultiArray'
+    });
+
+    sensorSub.subscribe(function(msg) {
+        if (!msg || !msg.data || msg.data.length === 0) {
+            sensorDistances = [];
+            updateSensorPanel();
+            return;
+        }
+
+        sensorDistances = msg.data.map(function(v) {
+            return (typeof v === 'number' && isFinite(v)) ? v : NaN;
+        });
+        updateSensorPanel();
+    });
+
+    // ================================================================
+    //  更新传感器面板
+    // ================================================================
+    function updateSensorPanel() {
+        for (let i = 0; i < 8; i++) {
+            const indEl = document.getElementById('ind-s' + i);
+            const valEl = document.getElementById('val-s' + i);
+            if (!indEl || !valEl) continue;
+
+            const d = (i < sensorDistances.length) ? sensorDistances[i] : NaN;
+
+            if (isNaN(d)) {
+                indEl.className = 'status-indicator indicator-idle';
+                valEl.textContent = '--';
+            } else {
+                indEl.className = 'status-indicator indicator-ok';
+                valEl.textContent = d.toFixed(0) + ' mm';
+            }
+        }
+    }
 
     // ================================================================
     //  更新状态面板
