@@ -17,7 +17,8 @@ DFS路径规划算法核心实现
   - 平层移动: 1.0s
   - 上+200mm台阶: 2.5s   上+400mm台阶: 4.0s
   - 下-200mm台阶: 3.5s   下-400mm台阶: 5.0s
-  - 抓取 KFS2: 4.0s
+  - 抓取 KFS2（与上一步同向）: 4.0s
+  - 抓取 KFS2（与上一步异向，有转向）: 4.5s
 
 移动模型：
   - 单向模式 (method=1)：无独立转向步。抓取步自带新朝向，后续所有 move 步
@@ -38,7 +39,8 @@ import numpy as np
 # ------------------------------------------------------------------
 # 代价常量
 # ------------------------------------------------------------------
-_FETCH_COST = 4.0
+_FETCH_COST_NO_TURN = 4.0   # 抓取时与上一步同向
+_FETCH_COST_TURN = 4.5      # 抓取时与上一步异向（有转向）
 
 # 高度差 → 耗时 (s) 映射
 _DH_COST = {
@@ -285,15 +287,22 @@ class DFSPlanner:
         # ---- 10. 计算代价（高度差 + 抓取） ----
         cost = 0.0
         last_x, last_y, last_h = 0.0, float(round(self.eval_path[0][2])), 0.0
+        last_yaw = 0.0  # 初始朝向
         for step in pub_path:
             if step[0] == 1:
-                cost += _FETCH_COST
+                # 抓取步：与上一步方向比较，异向则加转向耗时
+                if abs(step[4] - last_yaw) > 1e-6:
+                    cost += _FETCH_COST_TURN
+                else:
+                    cost += _FETCH_COST_NO_TURN
+                last_yaw = step[4]
             elif step[0] == 0:
                 sx, sy, sh = step[1], step[2], step[3]
                 if abs(sx - last_x) > 1e-6 or abs(sy - last_y) > 1e-6:
                     dh = int(round(sh - last_h))
                     cost += _DH_COST.get(dh, 1.0)
                     last_x, last_y, last_h = sx, sy, sh
+                last_yaw = step[4]
 
         self._add_path(pub_path, cost, kfs2_needed, kfs1_on_the_way)
 

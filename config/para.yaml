@@ -25,6 +25,5 @@
     mf_r2_data:                '/mf_r2_data'
     planning_paths_for_web:    '/planning/paths_for_web'
 
-    # -------------------- 发布 / 日志数量限制 --------------------
+    # -------------------- 发布数量限制 --------------------
     web_pub_top_n:  10          # 每个 kfs2 bucket 发布到 Web 的最多路径数
-    log_top_n:      3           # 每个 kfs2 bucket 日志打印的最多路径数

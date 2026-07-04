@@ -13,7 +13,6 @@ from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     ExecuteProcess,
-    LogInfo,
     RegisterEventHandler,
     TimerAction,
 )
@@ -59,6 +58,7 @@ def generate_launch_description():
             'call_services_in_new_thread': True,
             'send_action_goals_in_new_thread': True,
         }],
+        arguments=['--ros-args', '--log-level', 'WARN'],
         output='screen'
     )
 
@@ -85,6 +85,7 @@ def generate_launch_description():
         package='mf_action_planner',
         executable='mf_buffer_node',
         name='mf_buffer_node',
+        arguments=['--ros-args', '--log-level', 'WARN'],
         output='screen',
     )
 
@@ -95,6 +96,7 @@ def generate_launch_description():
         package='mf_action_planner',
         executable='dfs_planner_node',
         name='dfs_planner_node',
+        arguments=['--ros-args', '--log-level', 'WARN'],
         output='screen',
         parameters=[LaunchConfiguration('params_file')],
     )
@@ -106,7 +108,6 @@ def generate_launch_description():
         OnProcessStart(
             target_action=rosbridge_node,
             on_start=[
-                LogInfo(msg='rosbridge started, opening web page...'),
                 TimerAction(
                     period=1.0,
                     actions=[open_browser_action],
@@ -119,11 +120,9 @@ def generate_launch_description():
     # 构建 LaunchDescription
     # ============================
     ld = LaunchDescription(declared_arguments)
-    ld.add_action(LogInfo(msg='=== Starting mf_action_planner full stack ==='))
     ld.add_action(rosbridge_node)
     ld.add_action(buffer_node)
     ld.add_action(delayed_browser_open)
     ld.add_action(dfs_planner_node)
-    ld.add_action(LogInfo(msg='=== All nodes launched ==='))
 
     return ld

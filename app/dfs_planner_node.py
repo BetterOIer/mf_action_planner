@@ -8,14 +8,12 @@ DFS路径规划节点 - 简化版
 """
 
 import json
-import math
 
 import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
 from std_msgs.msg import String
-from nav_msgs.msg import Path
 
 from core.dfs import DFSPlanner
 
@@ -62,11 +60,9 @@ class DFSPlannerNode(Node):
             [000, 000, 000]
         ], dtype=int)
 
-        # ---- 发布/日志数量限制 ----
+        # ---- 发布数量限制 ----
         self.declare_parameter('web_pub_top_n', 10)
-        self.declare_parameter('log_top_n', 3)
         self.WEB_PUB_TOP_N = int(self.get_parameter('web_pub_top_n').value)
-        self.LOG_TOP_N = int(self.get_parameter('log_top_n').value)
 
         # ---- Topics ----
         kfs_topic = self.declare_parameter('mf_r2_data', '/mf_r2_data').value
@@ -91,7 +87,8 @@ class DFSPlannerNode(Node):
             String, paths_web_topic, qos_profile
         )
 
-        self.get_logger().info('DFS Planner Node started (Simplified)')
+        # 设置日志级别为 WARN，仅输出警告和错误
+        self.get_logger().set_level(rclpy.logging.LoggingSeverity.WARN)
 
     def kfs_data_callback(self, msg):
         """处理 /mf_r2_data 消息 — 包含 grid + team + method"""
@@ -107,10 +104,6 @@ class DFSPlannerNode(Node):
             self.current_team = payload.get('team', self.current_team)
             self.current_method = int(payload.get('method', self.current_method))
 
-            self.get_logger().info(
-                f'Received mf_r2_data: team={self.current_team}, '
-                f'method={self.current_method}\n{grid}'
-            )
             self._plan_all_starts()
 
         except json.JSONDecodeError as e:
@@ -134,27 +127,7 @@ class DFSPlannerNode(Node):
             method=self.current_method,
             logger=self.get_logger(),
         )
-        self.get_logger().info(f'=== Planning from start_y={self.start_y} ===')
         path = planner.plan_path(self.start_y)
-
-        # path 结构: [[], [], [], [], []] — kfs2=0..4 各一个 bucket
-        for k in range(5):
-            bucket = path[k]
-            n = min(self.LOG_TOP_N, len(bucket))
-            self.get_logger().info(
-                f'--- kfs2={k}: {len(bucket)} paths, showing top {n} ---'
-            )
-            for i in range(n):
-                p, cost, kfs2_cnt, kfs1_list = bucket[i]
-                self.get_logger().info(
-                    f'  #{i+1}: cost={cost:.1f}, kfs1_affected={len(kfs1_list)}, '
-                    f'steps={len(p)}'
-                )
-                for idx, step in enumerate(p):
-                    self.get_logger().info(
-                        f'    [{step[0]}, {step[1]}, {step[2]}, '
-                        f'{step[3]}, {step[4]}, {step[5]}, {step[6]}, {step[7]}]'
-                    )
 
         # 发布路径摘要到 Web 界面
         self._publish_paths_for_web(path)
@@ -192,10 +165,6 @@ class DFSPlannerNode(Node):
         msg = String()
         msg.data = json.dumps(web_data, ensure_ascii=False)
         self.paths_for_web_pub.publish(msg)
-        self.get_logger().info(
-            f'Published paths_for_web: '
-            f'{ {k: len(path[k]) for k in range(5)} }'
-        )
 
 
 def main(args=None):
