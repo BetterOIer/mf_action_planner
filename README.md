@@ -42,9 +42,18 @@ ros2 launch mf_action_planner mf_action_planner.launch.py
 | 上 +400mm 台阶 | 4.0s |
 | 下 -200mm 台阶 | 3.5s |
 | 下 -400mm 台阶 | 5.0s |
-| 抓取 KFS2 | 4.0s |
+| 抓取 KFS2（与上一步同向） | 4.0s |
+| 抓取 KFS2（与上一步异向，有转向） | 5.0s |
 
-代价常量定义在 `core/dfs.py` 的 `_DH_COST` 和 `_FETCH_COST` 中，旧版 `move_cost` / `turn_cost` / `fetch_kfs2_cost` 参数已废弃。
+代价常量定义在 `core/dfs.py` 的 `_DH_COST`、`_FETCH_COST_NO_TURN` 和 `_FETCH_COST_TURN` 中，旧版 `move_cost` / `turn_cost` / `fetch_kfs2_cost` 参数已废弃。
+
+### 路径排序
+
+每个 KFS2 抓取数（0~4）的 bucket 内按以下优先级升序排列：
+
+1. **路径代价**（越低越好）
+2. **受影响的 KFS1 数量**（越少越好）
+3. **路径中的转向次数**（越少越好）——转向定义为相邻步间朝向 `arg4` 发生变化
 
 ### 移动模型
 
@@ -256,7 +265,7 @@ def cb(self, msg: Float32MultiArray):
 | `app/dfs_planner_node.py` | ROS2 节点：订阅 `/mf_r2_data`，驱动 DFS 规划，发布路径摘要 |
 | `core/dfs.py` | DFS 搜索核心算法：路径评估、代价计算（高度差+抓取）、排序 |
 | `launch/mf_action_planner.launch.py` | 启动 rosbridge + 规划器 + 浏览器 |
-| `config/para.yaml` | 参数配置（话题名、默认值等；代价常量写死在 `core/dfs.py` 中） |
+| `config/para.yaml` | 参数配置（话题名、默认值、web_pub_top_n 等；代价常量写死在 `core/dfs.py` 中） |
 | `test/kfs_placement_analysis.py` | 离线分析工具：遍历所有 KFS 摆放 → DFS 规划 → 排名 → 生成 LaTeX 文档 |
 
 ## 坐标系约定
