@@ -145,7 +145,7 @@ class DFSPlannerNode(Node):
                 'paths': [],
             }
             for i in range(top_n):
-                p, cost, kfs2_cnt, kfs1_list = bucket[i]
+                p, cost, kfs2_cnt, kfs1_list, _turns = bucket[i]
                 path_entry = {
                     'index': i + 1,
                     'cost': cost,

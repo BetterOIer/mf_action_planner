@@ -40,7 +40,7 @@ import numpy as np
 # 代价常量
 # ------------------------------------------------------------------
 _FETCH_COST_NO_TURN = 4.0   # 抓取时与上一步同向
-_FETCH_COST_TURN = 4.5      # 抓取时与上一步异向（有转向）
+_FETCH_COST_TURN = 5.0      # 抓取时与上一步异向（有转向）
 
 # 高度差 → 耗时 (s) 映射
 _DH_COST = {
@@ -310,16 +310,29 @@ class DFSPlanner:
     # 路径存储与排序
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _count_turns(path):
+        """统计路径中朝向变化的次数"""
+        turns = 0
+        for i in range(1, len(path)):
+            if abs(path[i][4] - path[i - 1][4]) > 1e-6:
+                turns += 1
+        return turns
+
     def _add_path(self, path, cost, kfs2_needed, kfs1_affected):
-        """按 bucket 插入，bucket 内按 (cost, kfs1数量) 升序"""
+        """按 bucket 插入，bucket 内按 (cost, kfs1数量, 转向次数) 升序"""
         bucket = self.path[kfs2_needed]
-        bucket.append((path, cost, kfs2_needed, kfs1_affected))
+        turns = self._count_turns(path)
+        bucket.append((path, cost, kfs2_needed, kfs1_affected, turns))
         pos = len(bucket) - 1
         i = pos - 1
         while i >= 0 and (
             bucket[i][1] > bucket[pos][1]
             or (bucket[i][1] == bucket[pos][1]
                 and len(bucket[i][3]) > len(bucket[pos][3]))
+            or (bucket[i][1] == bucket[pos][1]
+                and len(bucket[i][3]) == len(bucket[pos][3])
+                and bucket[i][4] > bucket[pos][4])
         ):
             i -= 1
         bucket.insert(i + 1, bucket.pop(pos))
