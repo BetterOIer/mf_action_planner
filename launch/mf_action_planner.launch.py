@@ -31,7 +31,7 @@ def generate_launch_description():
     declared_arguments = [
         DeclareLaunchArgument(
             'open_browser',
-            default_value='true',
+            default_value='false',
             description='是否自动打开网页界面',
         ),
         DeclareLaunchArgument(
@@ -85,7 +85,7 @@ def generate_launch_description():
         package='mf_action_planner',
         executable='mf_buffer_node',
         name='mf_buffer_node',
-        arguments=['--ros-args', '--log-level', 'WARN'],
+        arguments=['--ros-args', '--log-level', 'INFO'],
         output='screen',
     )
 

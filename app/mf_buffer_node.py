@@ -45,7 +45,7 @@ class MfBufferNode(Node):
         # 初始状态
         self._publish_status()
 
-        self.get_logger().warn('MF Buffer Node started — waiting for /mf_action_seq')
+        self.get_logger().info('MF Buffer Node started — waiting for /mf_action_seq')
 
     def _publish_status(self):
         msg = String()
@@ -58,7 +58,7 @@ class MfBufferNode(Node):
         self._has_data = True
         self._publish_status()
         steps = len(msg.data) // 8 if msg.data else 0
-        self.get_logger().warn(f'Stored action seq: {steps} steps')
+        self.get_logger().info(f'Stored action seq: {steps} steps')
 
     def _get_action_seq_callback(self, request, response):
         """bt_engine_node 拉取 → 返回暂存数据并清空"""
@@ -69,7 +69,7 @@ class MfBufferNode(Node):
             self._has_data = False
             self._publish_status()
             steps = len(response.data.data) // 8 if response.data.data else 0
-            self.get_logger().warn(f'Served {steps} steps — buffer cleared')
+            self.get_logger().info(f'Served {steps} steps — buffer cleared')
         else:
             response.has_data = False
             self.get_logger().debug('Service called but buffer is empty')
