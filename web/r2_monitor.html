@@ -290,6 +290,17 @@
                     <span class="status-label">传感器8</span>
                     <span><span class="status-indicator indicator-idle" id="ind-s7"></span><span class="status-value" id="val-s7">--</span></span>
                 </div>
+                <div class="section-title" style="margin-top:4px;">/r0x0121</div>
+                <div class="status-row">
+                    <span class="status-label">连接</span>
+                    <span><span class="status-indicator indicator-idle" id="ind-r0-conn"></span><span class="status-value" id="val-r0-conn">--</span></span>
+                </div>
+                <div id="r0x0121-data-container">
+                    <div class="status-row">
+                        <span class="status-label">数据</span>
+                        <span class="status-value" id="val-r0-data" style="font-size:10px;">等待数据</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -465,6 +476,31 @@
         updateSensorPanel();
     });
 
+    // 订阅 /r0x0121 (std_msgs/Float32MultiArray)
+    let r0x0121Data = [];
+    let r0x0121Received = false;
+
+    const r0x0121Sub = new ROSLIB.Topic({
+        ros: ros,
+        name: '/r0x0121',
+        messageType: 'std_msgs/Float32MultiArray'
+    });
+
+    r0x0121Sub.subscribe(function(msg) {
+        if (!msg || !msg.data || msg.data.length === 0) {
+            r0x0121Data = [];
+            r0x0121Received = false;
+            updateR0x0121Panel();
+            return;
+        }
+
+        r0x0121Data = msg.data.map(function(v) {
+            return (typeof v === 'number' && isFinite(v)) ? v : NaN;
+        });
+        r0x0121Received = true;
+        updateR0x0121Panel();
+    });
+
     // ================================================================
     //  更新传感器面板
     // ================================================================
@@ -483,6 +519,72 @@
                 indEl.className = 'status-indicator indicator-ok';
                 valEl.textContent = d.toFixed(0) + ' mm';
             }
+        }
+    }
+
+    // ================================================================
+    //  更新 /r0x0121 面板
+    // ================================================================
+    function updateR0x0121Panel() {
+        const indConn = document.getElementById('ind-r0-conn');
+        const valConn = document.getElementById('val-r0-conn');
+        const container = document.getElementById('r0x0121-data-container');
+
+        // 连接指示
+        if (rosConnected && r0x0121Received) {
+            indConn.className = 'status-indicator indicator-ok';
+            valConn.textContent = '正常';
+        } else if (rosConnected) {
+            indConn.className = 'status-indicator indicator-warn';
+            valConn.textContent = '等待数据';
+        } else {
+            indConn.className = 'status-indicator indicator-error';
+            valConn.textContent = '断开';
+        }
+
+        // 动态生成数据行
+        if (!container) return;
+
+        // 清除旧的数据行
+        var rows = container.querySelectorAll('.r0-data-row');
+        for (var i = 0; i < rows.length; i++) {
+            rows[i].remove();
+        }
+
+        if (r0x0121Data.length === 0) {
+            var row = document.createElement('div');
+            row.className = 'status-row r0-data-row';
+            row.innerHTML = '<span class="status-label">数据</span>' +
+                '<span class="status-value" style="font-size:10px;">等待数据</span>';
+            container.appendChild(row);
+            return;
+        }
+
+        // 如果数据项 ≤ 8，逐行显示
+        // 如果数据项 > 8，使用紧凑网格显示
+        if (r0x0121Data.length <= 8) {
+            for (var i = 0; i < r0x0121Data.length; i++) {
+                var row = document.createElement('div');
+                row.className = 'status-row r0-data-row';
+                var val = r0x0121Data[i];
+                var valStr = isNaN(val) ? '--' : val.toFixed(3);
+                row.innerHTML = '<span class="status-label">[' + i + ']</span>' +
+                    '<span class="status-value">' + valStr + '</span>';
+                container.appendChild(row);
+            }
+        } else {
+            // 紧凑网格：所有值在一行内换行显示
+            var row = document.createElement('div');
+            row.className = 'r0-data-row';
+            row.style.cssText = 'display:flex;flex-wrap:wrap;gap:2px 6px;font-size:10px;font-family:Consolas,monospace;color:#555;margin-top:4px;';
+            var html = '';
+            for (var i = 0; i < r0x0121Data.length; i++) {
+                var val = r0x0121Data[i];
+                var valStr = isNaN(val) ? '--' : val.toFixed(2);
+                html += '<span>[' + i + ']:<b>' + valStr + '</b></span>';
+            }
+            row.innerHTML = html;
+            container.appendChild(row);
         }
     }
 
