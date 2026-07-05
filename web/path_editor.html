@@ -460,11 +460,57 @@
         return Math.atan2(y2 - y1, x2 - x1);
     }
 
+    /**
+     * 硬件安全约束：连续抓取操作不得超过1次。
+     * 当 detail 中出现连续>=2次fetch时，每两个fetch之间插入一个move，
+     * 将机器人移回最近的真实move位置，并以当前fetch的yaw朝向。
+     */
+    function insertSafetyMoves(detail) {
+        if (!detail || detail.length === 0) return detail;
+
+        const result = [];
+        let i = 0;
+        let lastMoveCoords = null;  // {x, y, z} 最近的真实 move
+
+        while (i < detail.length) {
+            const step = detail[i];
+            if (step[0] === 0) {  // move
+                lastMoveCoords = { x: step[1], y: step[2], z: step[3] };
+                result.push(step);
+                i++;
+            } else if (step[0] === 1) {  // fetch
+                const fetchRun = [];
+                while (i < detail.length && detail[i][0] === 1) {
+                    fetchRun.push(detail[i]);
+                    i++;
+                }
+
+                if (fetchRun.length >= 2) {
+                    for (let j = 0; j < fetchRun.length; j++) {
+                        result.push(fetchRun[j]);
+                        // 每个 fetch 之后（除了最后一个）插入一个 move
+                        if (j !== fetchRun.length - 1) {
+                            const mx = lastMoveCoords ? lastMoveCoords.x : fetchRun[j][1];
+                            const my = lastMoveCoords ? lastMoveCoords.y : fetchRun[j][2];
+                            const mz = lastMoveCoords ? lastMoveCoords.z : 0;
+                            const myaw = fetchRun[j][4];  // 当前fetch的yaw
+                            result.push([0, mx, my, mz, myaw, 0, 0, 0]);
+                        }
+                    }
+                } else {
+                    for (const fs of fetchRun) result.push(fs);
+                }
+            }
+        }
+        return result;
+    }
+
     /** 构建完整动作序列 [ [action,x,y,z_or_dh,yaw,0,0,0], ... ]
      *  规则：
      *  - 全向模式：朝向恒为 0。
      *  - 单向模式：无独立转向步。抓取步自带新朝向，后续所有 move 步
-     *    沿用此朝向直到下一次抓取改变。 */
+     *    沿用此朝向直到下一次抓取改变。
+     *  - 自动插入安全move确保连续fetch不超过2次。 */
     function buildActionSequence() {
         const seq = [];
         const isUni = (method === 1);
@@ -494,7 +540,8 @@
 
             node = node.nextId ? getMoveNodeById(node.nextId) : null;
         }
-        return seq;
+        // 硬件安全：插入安全move
+        return insertSafetyMoves(seq);
     }
 
     function renderPathViewer() {

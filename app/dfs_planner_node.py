@@ -132,6 +132,48 @@ class DFSPlannerNode(Node):
         # 发布路径摘要到 Web 界面
         self._publish_paths_for_web(path)
 
+    @staticmethod
+    def _insert_safety_moves(path):
+        """
+        硬件安全约束：连续抓取操作不得超过1次。
+        当出现连续>=2次fetch时，每两个fetch之间插入一个move，
+        将机器人移回最近的真实move位置，并以当前fetch的yaw朝向。"""
+        if not path:
+            return path
+
+        result = []
+        i = 0
+        last_move_coords = None  # (x, y, z) 最近的真实 move
+
+        while i < len(path):
+            step = path[i]
+            if step[0] == 0:  # move
+                last_move_coords = (step[1], step[2], step[3])
+                result.append(step)
+                i += 1
+            elif step[0] == 1:  # fetch
+                fetch_run = []
+                while i < len(path) and path[i][0] == 1:
+                    fetch_run.append(path[i])
+                    i += 1
+
+                if len(fetch_run) >= 2:
+                    for j, fstep in enumerate(fetch_run):
+                        result.append(fstep)
+                        # 每个 fetch 之后（除了最后一个）插入一个 move
+                        if j != len(fetch_run) - 1:
+                            if last_move_coords is not None:
+                                mx, my, mz = last_move_coords
+                            else:
+                                mx, my, mz = fstep[1], fstep[2], 0.0
+                            # yaw 取自当前 fetch（插入位置前面的那个）
+                            myaw = fstep[4]
+                            result.append([0, mx, my, mz, myaw, 0.0, 0.0, 0.0])
+                else:
+                    result.extend(fetch_run)
+
+        return result
+
     def _publish_paths_for_web(self, path):
         """将 kfs2=0..4 各前 N 条路径发布到 Web 话题"""
         web_data = {'buckets': []}
@@ -146,17 +188,19 @@ class DFSPlannerNode(Node):
             }
             for i in range(top_n):
                 p, cost, kfs2_cnt, kfs1_list, _turns = bucket[i]
+                # 二次确保硬件安全约束（dfs.py 已处理，此处作为兜底）
+                p_safe = DFSPlannerNode._insert_safety_moves(p)
                 path_entry = {
                     'index': i + 1,
                     'cost': cost,
                     'kfs2_count': kfs2_cnt,
                     'kfs1_affected': len(kfs1_list),
-                    'steps': len(p),
+                    'steps': len(p_safe),
                     'detail': [
                         [int(s[0]), float(s[1]), float(s[2]),
                          float(s[3]), float(s[4]),
                          float(s[5]), float(s[6]), float(s[7])]
-                        for s in p
+                        for s in p_safe
                     ],
                 }
                 bucket_entry['paths'].append(path_entry)

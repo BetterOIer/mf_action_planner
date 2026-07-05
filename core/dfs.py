@@ -135,6 +135,49 @@ class DFSPlanner:
             dst.append(step[:])
 
     @staticmethod
+    def _insert_safety_moves(path):
+        """
+        硬件安全约束：连续抓取操作不得超过1次。
+        当出现连续>=2次fetch时，每两个fetch之间插入一个move，
+        将机器人移回最近的真实move位置，并以当前fetch的yaw朝向。"""
+        if not path:
+            return path
+
+        result = []
+        i = 0
+        last_move_coords = None  # (x, y, z) 最近的真实 move
+
+        while i < len(path):
+            step = path[i]
+            if step[0] == 0:  # move
+                last_move_coords = (step[1], step[2], step[3])
+                result.append(step)
+                i += 1
+            elif step[0] == 1:  # fetch
+                # 收集连续 fetch
+                fetch_run = []
+                while i < len(path) and path[i][0] == 1:
+                    fetch_run.append(path[i])
+                    i += 1
+
+                if len(fetch_run) >= 2:
+                    for j, fstep in enumerate(fetch_run):
+                        result.append(fstep)
+                        # 每个 fetch 之后（除了最后一个）插入一个 move
+                        if j != len(fetch_run) - 1:
+                            if last_move_coords is not None:
+                                mx, my, mz = last_move_coords
+                            else:
+                                mx, my, mz = fstep[1], fstep[2], 0.0
+                            # yaw 取自当前 fetch（插入位置前面的那个）
+                            myaw = fstep[4]
+                            result.append([0, mx, my, mz, myaw, 0.0, 0.0, 0.0])
+                else:
+                    result.extend(fetch_run)
+
+        return result
+
+    @staticmethod
     def _get_dir_idx(yaw):
         if abs(yaw - 0) < 1e-6:
             return 0
@@ -274,6 +317,9 @@ class DFSPlanner:
                     effective_yaw = next_step[4]
 
             pub_path.extend(extra_steps)
+
+        # ---- 8.5 硬件安全：连续抓取不超过2次 ----
+        pub_path = self._insert_safety_moves(pub_path)
 
         # ---- 9. 首排 kfs2 未取则进入 grid 即无效 ----
         if kfs2_needed_in_first_row != 0:

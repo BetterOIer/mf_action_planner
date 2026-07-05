@@ -62,6 +62,16 @@ ros2 launch mf_action_planner mf_action_planner.launch.py
 
 两种模式均不产生原地转向步骤。路径发布时直接套用以上规则得到朝向序列，无需另外的转向动作。
 
+### 硬件安全约束
+
+由于硬件限制，**连续抓取操作不得超过 1 次**。当路径中出现连续 ≥2 次 fetch 时，规划器会自动在每两个相邻 fetch 之间插入一个 move 步骤：
+
+- 插入的 move 坐标为该 fetch 序列之前最近一个 move 的坐标（含高度）
+- 插入的 move 的 yaw 取它前面那个 fetch 的 yaw 值
+- 最后一个 fetch 之后不插入
+
+该约束同时应用于 DFS 规划器（`dfs.py`）、ROS 节点发布（`dfs_planner_node.py`）以及 Web 端自定义路径发布（`path_editor.html`），确保无论通过哪种方式生成的路径都满足硬件要求。
+
 ## 架构与数据流
 
 ```
