@@ -189,38 +189,38 @@ class DFSPlanner:
 
     @staticmethod
     def _has_backward_step_with_height_change(path):
-        """检查路径中是否存在运动方向与朝向相反且目标高度与当前高度不同的步。
+        """检查路径中是否存在运动方向与朝向完全相反且高度有变化的步。
 
-        运动方向 = 从上一步位置到当前位置的位移向量
-        朝向     = 当前步的 yaw (path[i][4])
+        只比较连续的两个移动步（type == 0），跳过中间的抓取步，
+        因为抓取步的位置是 KFS 坐标而非机器人坐标，直接比较会误判方向。
 
-        如果存在这样的步（移动方向与朝向相反 且 高度有变化），返回 True，
-        表示应放弃该路径。
+        如果存在这样的步（移动方向与朝向完全相反 且 高度有变化），
+        返回 True，表示应放弃该路径。
         """
-        for i in range(1, len(path)):
-            prev = path[i - 1]
-            curr = path[i]
-            if curr[0] != 0:          # 只检查移动步 (type == 0)
+        last_move = None
+        for step in path:
+            if step[0] != 0:          # 跳过抓取步 (type == 1)
                 continue
 
-            dx = curr[1] - prev[1]    # x 方向位移
-            dy = curr[2] - prev[2]    # y 方向位移
-            dh = curr[3] - prev[3]    # 高度差
+            if last_move is not None:
+                dx = step[1] - last_move[1]   # x 方向位移
+                dy = step[2] - last_move[2]   # y 方向位移
+                dh = step[3] - last_move[3]   # 高度差
 
-            if abs(dh) < 1e-6:
-                continue               # 无高度变化，跳过
+                if abs(dh) >= 1e-6:            # 有高度变化才检查
+                    yaw = step[4]               # 当前步的朝向
 
-            yaw = curr[4]              # 当前步的朝向
+                    # 朝向 0 (面向 +x) 但向 -x 移动
+                    if abs(yaw - 0) < 1e-6 and dx < -1e-6:
+                        return True
+                    # 朝向 pi/2 (面向 +y) 但向 -y 移动
+                    if abs(yaw - math.pi / 2) < 1e-6 and dy < -1e-6:
+                        return True
+                    # 朝向 -pi/2 (面向 -y) 但向 +y 移动
+                    if abs(yaw + math.pi / 2) < 1e-6 and dy > 1e-6:
+                        return True
 
-            # 朝向 0 (面向 +x) 但向 -x 移动
-            if abs(yaw - 0) < 1e-6 and dx < -1e-6:
-                return True
-            # 朝向 pi/2 (面向 +y) 但向 -y 移动
-            if abs(yaw - math.pi / 2) < 1e-6 and dy < -1e-6:
-                return True
-            # 朝向 -pi/2 (面向 -y) 但向 +y 移动
-            if abs(yaw + math.pi / 2) < 1e-6 and dy > 1e-6:
-                return True
+            last_move = step
 
         return False
 
