@@ -187,6 +187,43 @@ class DFSPlanner:
             return 2
         return 0
 
+    @staticmethod
+    def _has_backward_step_with_height_change(path):
+        """检查路径中是否存在运动方向与朝向相反且目标高度与当前高度不同的步。
+
+        运动方向 = 从上一步位置到当前位置的位移向量
+        朝向     = 当前步的 yaw (path[i][4])
+
+        如果存在这样的步（移动方向与朝向相反 且 高度有变化），返回 True，
+        表示应放弃该路径。
+        """
+        for i in range(1, len(path)):
+            prev = path[i - 1]
+            curr = path[i]
+            if curr[0] != 0:          # 只检查移动步 (type == 0)
+                continue
+
+            dx = curr[1] - prev[1]    # x 方向位移
+            dy = curr[2] - prev[2]    # y 方向位移
+            dh = curr[3] - prev[3]    # 高度差
+
+            if abs(dh) < 1e-6:
+                continue               # 无高度变化，跳过
+
+            yaw = curr[4]              # 当前步的朝向
+
+            # 朝向 0 (面向 +x) 但向 -x 移动
+            if abs(yaw - 0) < 1e-6 and dx < -1e-6:
+                return True
+            # 朝向 pi/2 (面向 +y) 但向 -y 移动
+            if abs(yaw - math.pi / 2) < 1e-6 and dy < -1e-6:
+                return True
+            # 朝向 -pi/2 (面向 -y) 但向 +y 移动
+            if abs(yaw + math.pi / 2) < 1e-6 and dy > 1e-6:
+                return True
+
+        return False
+
     def _evaluate_path(self):
         # ---- 1. 检查首排 kfs2 ----
         kfs2_needed_in_first_row = 0
@@ -320,6 +357,10 @@ class DFSPlanner:
 
         # ---- 8.5 硬件安全：连续抓取不超过2次 ----
         pub_path = self._insert_safety_moves(pub_path)
+
+        # ---- 8.6 检查运动方向与朝向相反且高度变化（上/下台阶） ----
+        if self._has_backward_step_with_height_change(pub_path):
+            return
 
         # ---- 9. 首排 kfs2 未取则进入 grid 即无效 ----
         if kfs2_needed_in_first_row != 0:
