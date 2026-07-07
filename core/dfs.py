@@ -359,8 +359,8 @@ class DFSPlanner:
         pub_path = self._insert_safety_moves(pub_path)
 
         # ---- 8.6 检查运动方向与朝向相反且高度变化（上/下台阶） ----
-        if self._has_backward_step_with_height_change(pub_path):
-            return
+        # if self._has_backward_step_with_height_change(pub_path):
+        #     return
 
         # ---- 9. 首排 kfs2 未取则进入 grid 即无效 ----
         if kfs2_needed_in_first_row != 0:

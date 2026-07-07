@@ -8,7 +8,8 @@ visualizing the worst-30 placements for each scenario.
 
 Constraints (per user specification):
     - Exactly 4 KFS2  (value 2)  — anywhere in the 12 inner cells (rows 1–4)
-    - Exactly 3 KFS1  (value 1)  — only at outermost cells (rows 1/4, cols 0/2)
+    - Exactly 3 KFS1  (value 1)  — only at boundary cells of the inner area
+      (top row 1, bottom row 4, left col 0, right col 2 — 10 cells total)
     - Exactly 1 fake  (value 3)  — NOT in row 1
     - Remaining 4 cells are empty (value 0)
 
@@ -68,8 +69,11 @@ _INNER_TO_RC = [
     (4, 0), (4, 1), (4, 2),
 ]
 
-# Cells where KFS1 (value 1) is allowed: outermost = (1,0),(1,2),(4,0),(4,2)
-_KFS1_CAPABLE = [0, 2, 9, 11]
+# Cells where KFS1 (value 1) is allowed: all boundary cells of the inner 4×3 area
+# (top row 1, bottom row 4, left col 0, right col 2 — the "four edges")
+# inner indices: 0=(1,0), 1=(1,1), 2=(1,2), 3=(2,0), 5=(2,2),
+#                6=(3,0), 8=(3,2), 9=(4,0), 10=(4,1), 11=(4,2)
+_KFS1_CAPABLE = [0, 1, 2, 3, 5, 6, 8, 9, 10, 11]
 
 # Cells where fake KFS (value 3) is allowed: rows 2-4, all cols
 # inner indices: 3,4,5,6,7,8,9,10,11
@@ -180,6 +184,12 @@ def _plan_worker(args):
     best_3 = planner.path[3][0] if planner.path[3] else None
     best_4 = planner.path[4][0] if planner.path[4] else None
 
+    # kfs1_affected stores [nowX-1, nowY]; convert to actual grid (r, c)
+    def _actual_kfs1_positions(best):
+        if best is None:
+            return []
+        return [[p[0] + 1, p[1]] for p in best[3]]
+
     return {
         'grid': grid_list,
         'cost_2': best_2[1] if best_2 else float('inf'),
@@ -188,6 +198,9 @@ def _plan_worker(args):
         'kfs1_2': len(best_2[3]) if best_2 else 0,
         'kfs1_3': len(best_3[3]) if best_3 else 0,
         'kfs1_4': len(best_4[3]) if best_4 else 0,
+        'kfs1_affected_2': _actual_kfs1_positions(best_2),
+        'kfs1_affected_3': _actual_kfs1_positions(best_3),
+        'kfs1_affected_4': _actual_kfs1_positions(best_4),
         'steps_2': len(best_2[0]) if best_2 else 0,
         'steps_3': len(best_3[0]) if best_3 else 0,
         'steps_4': len(best_4[0]) if best_4 else 0,
@@ -226,12 +239,21 @@ _CELL_COLORS = {0: 'white', 1: 'blue!30', 2: 'red!30', 3: 'black!15'}
 _CELL_LABELS = {0: '0', 1: '1', 2: '2', 3: 'f'}
 
 
-def _tikz_grid(grid_list):
+def _tikz_grid(grid_list, affected_kfs1=None):
     """Return TikZ commands for a 6×3 grid.
 
     Row 5 (exit) at top, row 0 (entry) at bottom.
     Column 0 on the **right** (col 2 on left).
+
+    Parameters
+    ----------
+    affected_kfs1 : list of [r, c] or None
+        KFS1 cells that were on the optimal path (shown in darker blue).
     """
+    affected_set = set()
+    if affected_kfs1:
+        affected_set = {(int(r), int(c)) for r, c in affected_kfs1}
+
     lines = []
     lines.append(r'\begin{tikzpicture}[scale=0.55]')
 
@@ -252,7 +274,10 @@ def _tikz_grid(grid_list):
         for c in range(GRID_COLS):
             tikz_x = GRID_COLS - 1 - c   # col 0 → rightmost
             val = int(grid_list[r][c])
-            color = _CELL_COLORS.get(val, 'white')
+            if val == 1 and (r, c) in affected_set:
+                color = 'blue!60'   # darker: affected KFS1
+            else:
+                color = _CELL_COLORS.get(val, 'white')
             label = _CELL_LABELS.get(val, '?')
             lines.append(
                 r'  \fill[{color}] ({x},{y}) rectangle ++(1,1);'
@@ -270,11 +295,11 @@ def _tikz_grid(grid_list):
     return '\n'.join(lines)
 
 
-def _scheme_block(rank_info, cost, kfs1_count, target_kfs2):
+def _scheme_block(rank_info, cost, kfs1_count, affected_kfs1, target_kfs2):
     """Return LaTeX for a single scheme (grid + one-line annotation)."""
     grid_list = rank_info['grid']
     label = rank_info.get('label', '')
-    tikz = _tikz_grid(grid_list)
+    tikz = _tikz_grid(grid_list, affected_kfs1)
 
     # One-line annotation, e.g.  "#01 cost=28.0, k1=2"
     annotation = f'{label} cost={cost:.1f}, k1={kfs1_count}'
@@ -302,7 +327,7 @@ def generate_tex(worst_2, worst_3, worst_4, output_path):
     for i, r in enumerate(worst_4):
         r['label'] = f'\\#{{{i+1:02d}}}'
 
-    def _write_section(lines_out, items, cost_key, kfs1_key, target_kfs2):
+    def _write_section(lines_out, items, cost_key, kfs1_key, affected_key, target_kfs2):
         """Write one section (page of 15 items, 5 rows × 3 cols)."""
         for page_start in range(0, len(items), 15):
             page_items = items[page_start:page_start + 15]
@@ -313,18 +338,21 @@ def generate_tex(worst_2, worst_3, worst_4, output_path):
 
                 lines_out.append(r'\vspace{2mm}')
                 lines_out.append(r'\noindent')
-                lines_out.append(_scheme_block(a, a[cost_key], a[kfs1_key], target_kfs2))
+                lines_out.append(_scheme_block(a, a[cost_key], a[kfs1_key],
+                                               a.get(affected_key, []), target_kfs2))
 
                 if b:
                     lines_out.append(r'\hfill')
-                    lines_out.append(_scheme_block(b, b[cost_key], b[kfs1_key], target_kfs2))
+                    lines_out.append(_scheme_block(b, b[cost_key], b[kfs1_key],
+                                                   b.get(affected_key, []), target_kfs2))
                 else:
                     lines_out.append(r'\hfill')
                     lines_out.append(r'\begin{minipage}[t]{0.32\textwidth}\centering~\end{minipage}')
 
                 if c:
                     lines_out.append(r'\hfill')
-                    lines_out.append(_scheme_block(c, c[cost_key], c[kfs1_key], target_kfs2))
+                    lines_out.append(_scheme_block(c, c[cost_key], c[kfs1_key],
+                                                   c.get(affected_key, []), target_kfs2))
                 else:
                     lines_out.append(r'\hfill')
                     lines_out.append(r'\begin{minipage}[t]{0.32\textwidth}\centering~\end{minipage}')
@@ -347,19 +375,19 @@ def generate_tex(worst_2, worst_3, worst_4, output_path):
     # ---- Section 1: Worst-30 for 2 KFS2 ----
     lines.append(r'\section*{Worst 30 KFS Placements --- 2 KFS2 Collection}')
     lines.append(r'\vspace{1mm}')
-    _write_section(lines, worst_2, 'cost_2', 'kfs1_2', 2)
+    _write_section(lines, worst_2, 'cost_2', 'kfs1_2', 'kfs1_affected_2', 2)
 
     # ---- Section 2: Worst-30 for 3 KFS2 ----
     lines.append(r'\newpage')
     lines.append(r'\section*{Worst 30 KFS Placements --- 3 KFS2 Collection}')
     lines.append(r'\vspace{1mm}')
-    _write_section(lines, worst_3, 'cost_3', 'kfs1_3', 3)
+    _write_section(lines, worst_3, 'cost_3', 'kfs1_3', 'kfs1_affected_3', 3)
 
     # ---- Section 3: Worst-30 for 4 KFS2 ----
     lines.append(r'\newpage')
     lines.append(r'\section*{Worst 30 KFS Placements --- 4 KFS2 Collection}')
     lines.append(r'\vspace{1mm}')
-    _write_section(lines, worst_4, 'cost_4', 'kfs1_4', 4)
+    _write_section(lines, worst_4, 'cost_4', 'kfs1_4', 'kfs1_affected_4', 4)
 
     lines.append(r'\end{document}')
 
