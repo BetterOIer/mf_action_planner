@@ -93,7 +93,7 @@
 
         /* ====== 右侧状态面板（透明容器） ====== */
         .status-panel {
-            width: 220px;
+            width: 260px;
             flex-shrink: 0;
             display: flex;
             flex-direction: column;
@@ -248,6 +248,27 @@
             text-align: center;
             user-select: none;
         }
+
+        .action-inputs {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            flex: 1;
+            justify-content: flex-end;
+        }
+        .action-input {
+            width: 34px;
+            padding: 3px 1px;
+            border: none;
+            border-radius: 5px;
+            background: #e8e8e8;
+            font-size: 10px;
+            font-family: 'Consolas', monospace;
+            text-align: center;
+            color: #333;
+            outline: none;
+        }
+        .action-input:focus { background: #ddd; }
 
         .title-dot {
             display: inline-block;
@@ -426,7 +447,7 @@
                 <div class="panel-section panel-action" id="panel-action">
                     <div class="panel-section-title">Action</div>
                     <div class="panel-section-body">
-                        <div class="action-control-row" id="action-control-row">
+                        <div class="action-control-row" id="row-start">
                             <div class="start-btn-wrapper locked" id="start-btn-wrapper">
                                 <button class="start-btn" id="start-btn">启</button>
                             </div>
@@ -435,6 +456,29 @@
                                 <button class="region-arrow" id="region-prev">&#9664;</button>
                                 <span class="region-text" id="region-text">full</span>
                                 <button class="region-arrow" id="region-next">&#9654;</button>
+                            </div>
+                        </div>
+                        <div class="action-control-row" id="row-move">
+                            <div class="start-btn-wrapper locked" id="move-btn-wrapper">
+                                <button class="start-btn" id="move-btn">移</button>
+                            </div>
+                            <div class="progress-fill" id="move-progress-fill"></div>
+                            <div class="action-inputs">
+                                <input class="action-input" id="move-x" type="number" placeholder="x" step="0.01">
+                                <input class="action-input" id="move-y" type="number" placeholder="y" step="0.01">
+                                <input class="action-input" id="move-yaw" type="number" placeholder="yaw" step="0.01">
+                            </div>
+                        </div>
+                        <div class="action-control-row" id="row-lift">
+                            <div class="start-btn-wrapper locked" id="lift-btn-wrapper">
+                                <button class="start-btn" id="lift-btn">升</button>
+                            </div>
+                            <div class="progress-fill" id="lift-progress-fill"></div>
+                            <div class="action-inputs">
+                                <input class="action-input" id="lift-fl" type="number" placeholder="FL" step="1">
+                                <input class="action-input" id="lift-fr" type="number" placeholder="FR" step="1">
+                                <input class="action-input" id="lift-rl" type="number" placeholder="RL" step="1">
+                                <input class="action-input" id="lift-rr" type="number" placeholder="RR" step="1">
                             </div>
                         </div>
                     </div>
@@ -781,91 +825,93 @@
     }
 
     // ================================================================
-    //  Action 面板：锁定按钮 + 下拉框 + 长按发送
+    //  Action 面板：锁定按钮工厂 + 长按发送
     // ================================================================
-    let startLocked = true;
-    let unlockTimer = null;
-    let holdInterval = null;
-    let isHolding = false;
-    let selectedRegion = 'full';
+    var actionButtons = [];
 
-    function lockStart() {
-        clearTimeout(unlockTimer);
-        clearInterval(holdInterval);
-        startLocked = true;
-        isHolding = false;
-        var wrapper = document.getElementById('start-btn-wrapper');
-        wrapper.classList.add('locked');
-        wrapper.classList.remove('unlocked');
-        var fill = document.getElementById('progress-fill');
-        fill.classList.add('retracting');
-        fill.style.transform = 'scaleX(0)';
-        setTimeout(function() { fill.classList.remove('retracting'); }, 300);
-    }
+    function createActionButton(btnId, wrapperId, fillId, rowId, fireFn) {
+        var locked = true;
+        var unlockTimer = null;
+        var holdInterval = null;
+        var holding = false;
 
-    function unlockStart() {
-        startLocked = false;
-        document.getElementById('start-btn-wrapper').classList.remove('locked');
-        document.getElementById('start-btn-wrapper').classList.add('unlocked');
-        unlockTimer = setTimeout(lockStart, 1000);
-    }
+        function lock() {
+            clearTimeout(unlockTimer);
+            clearInterval(holdInterval);
+            locked = true;
+            holding = false;
+            document.getElementById(wrapperId).classList.add('locked');
+            document.getElementById(wrapperId).classList.remove('unlocked');
+            var fill = document.getElementById(fillId);
+            fill.classList.add('retracting');
+            fill.style.transform = 'scaleX(0)';
+            setTimeout(function() { fill.classList.remove('retracting'); }, 300);
+        }
 
-    function beginHold() {
-        clearTimeout(unlockTimer);
-        isHolding = true;
-        var fill = document.getElementById('progress-fill');
-        var btn = document.getElementById('start-btn');
-        var row = document.getElementById('action-control-row');
-        var btnRect = btn.getBoundingClientRect();
-        var rowLeft = row.getBoundingClientRect().left;
-        fill.style.left = (btnRect.right - rowLeft - 10) + 'px';
-        fill.classList.remove('retracting');
-        fill.style.transform = 'scaleX(0)';
+        function unlock() {
+            locked = false;
+            document.getElementById(wrapperId).classList.remove('locked');
+            document.getElementById(wrapperId).classList.add('unlocked');
+            unlockTimer = setTimeout(lock, 1000);
+        }
 
-        var elapsed = 0;
-        holdInterval = setInterval(function() {
-            elapsed += 50;
-            var pct = Math.min(elapsed / 1000, 1);
-            fill.style.transform = 'scaleX(' + pct + ')';
-            if (elapsed >= 1000) {
-                clearInterval(holdInterval);
-                fireStart();
-                lockStart();
-            }
-        }, 50);
-    }
+        function beginHold() {
+            clearTimeout(unlockTimer);
+            holding = true;
+            var fill = document.getElementById(fillId);
+            var btn = document.getElementById(btnId);
+            var row = document.getElementById(rowId);
+            var btnRect = btn.getBoundingClientRect();
+            var rowLeft = row.getBoundingClientRect().left;
+            fill.style.left = (btnRect.right - rowLeft - 3) + 'px';
+            fill.classList.remove('retracting');
+            fill.style.transform = 'scaleX(0)';
+            var elapsed = 0;
+            holdInterval = setInterval(function() {
+                elapsed += 50;
+                var pct = Math.min(elapsed / 1000, 1);
+                fill.style.transform = 'scaleX(' + pct + ')';
+                if (elapsed >= 1000) {
+                    clearInterval(holdInterval);
+                    fireFn();
+                    lock();
+                }
+            }, 50);
+        }
 
-    // ---- 按钮事件 ----
-    (function() {
-        var startBtn = document.getElementById('start-btn');
-        if (!startBtn) return;
+        var btn = document.getElementById(btnId);
+        if (!btn) return;
 
-        startBtn.addEventListener('mousedown', function(e) {
+        btn.addEventListener('mousedown', function(e) {
             e.preventDefault();
-            if (startLocked) { unlockStart(); }
+            if (locked) { unlock(); }
             else { beginHold(); }
         });
-
-        document.addEventListener('mouseup', function(e) {
-            if (isHolding) {
-                clearInterval(holdInterval);
-                lockStart();
-            }
-        });
-
-        startBtn.addEventListener('touchstart', function(e) {
+        btn.addEventListener('touchstart', function(e) {
             e.preventDefault();
-            if (startLocked) { unlockStart(); }
+            if (locked) { unlock(); }
             else { beginHold(); }
         }, { passive: false });
 
-        document.addEventListener('touchend', function(e) {
-            if (isHolding) {
-                clearInterval(holdInterval);
-                lockStart();
-            }
-        });
-    })();
+        return {
+            isHolding: function() { return holding; },
+            cancel: function() { if (holding) { clearInterval(holdInterval); lock(); } }
+        };
+    }
+
+    // 全局 mouseup/touchend — 检查所有按钮
+    document.addEventListener('mouseup', function(e) {
+        for (var i = 0; i < actionButtons.length; i++) {
+            if (actionButtons[i].isHolding()) { actionButtons[i].cancel(); }
+        }
+    });
+    document.addEventListener('touchend', function(e) {
+        for (var i = 0; i < actionButtons.length; i++) {
+            if (actionButtons[i].isHolding()) { actionButtons[i].cancel(); }
+        }
+    });
+
+    let selectedRegion = 'full';
 
     // ---- 区域循环选择 ----
     (function() {
@@ -908,6 +954,51 @@
             }
         });
     }
+
+    // ---- "移" move_to_pose ----
+    var moveClient = new ROSLIB.ActionClient({
+        ros: ros, serverName: '/move_to_pose',
+        actionName: 'action_of_motion_interfaces/action/MoveToPose'
+    });
+
+    function fireMove() {
+        var x = parseFloat(document.getElementById('move-x').value) || 0;
+        var y = parseFloat(document.getElementById('move-y').value) || 0;
+        var yawRad = parseFloat(document.getElementById('move-yaw').value) || 0;
+        var goal = new ROSLIB.Goal({
+            actionClient: moveClient,
+            goalMessage: {
+                pid_profile: 1, x: x, y: y,
+                yaw_deg: yawRad * 180 / Math.PI,
+                max_vel: 0, max_wz: 0,
+                completion_distance: 0,
+                completion_position_only: false,
+                skip_brake_on_success: false
+            }
+        });
+        goal.send();
+        console.log('move_to_pose sent: x=' + x + ' y=' + y + ' yaw_deg=' + (yawRad * 180 / Math.PI).toFixed(1));
+    }
+
+    // ---- "升" t0x0112_action ----
+    var liftPub = new ROSLIB.Topic({
+        ros: ros, name: 't0x0112_action',
+        messageType: 'std_msgs/Float32MultiArray'
+    });
+
+    function fireLift() {
+        var fl = parseFloat(document.getElementById('lift-fl').value) || 0;
+        var fr = parseFloat(document.getElementById('lift-fr').value) || 0;
+        var rl = parseFloat(document.getElementById('lift-rl').value) || 0;
+        var rr = parseFloat(document.getElementById('lift-rr').value) || 0;
+        liftPub.publish(new ROSLIB.Message({ data: [fl, fr, rl, rr] }));
+        console.log('lift sent: [' + fl + ', ' + fr + ', ' + rl + ', ' + rr + '] mm');
+    }
+
+    // ---- 实例化三个按钮 ----
+    actionButtons.push(createActionButton('start-btn', 'start-btn-wrapper', 'progress-fill', 'row-start', fireStart));
+    actionButtons.push(createActionButton('move-btn', 'move-btn-wrapper', 'move-progress-fill', 'row-move', fireMove));
+    actionButtons.push(createActionButton('lift-btn', 'lift-btn-wrapper', 'lift-progress-fill', 'row-lift', fireLift));
 
     // ================================================================
     //  更新 /odin1/relocation 面板
