@@ -502,7 +502,7 @@
         </div>
     </div>
 
-    <script src="roslib.min.js"></script>
+    <script src="roslib.js"></script>
     <script>
     // ================================================================
     //  场地坐标数据 (单位: mm)
@@ -955,18 +955,25 @@
         });
     }
 
-    // ---- "移" move_to_pose ----
-    var moveClient = new ROSLIB.ActionClient({
-        ros: ros, serverName: '/move_to_pose',
-        actionName: 'action_of_motion_interfaces/action/MoveToPose'
-    });
+    // ---- "移" move_to_pose（懒加载，避免页面加载时触发 rosbridge 报错）----
+    var moveClient = null;
+
+    function getMoveClient() {
+        if (!moveClient) {
+            moveClient = new ROSLIB.ActionClient({
+                ros: ros, serverName: '/move_to_pose',
+                actionName: 'action_of_motion_interfaces/action/MoveToPose'
+            });
+        }
+        return moveClient;
+    }
 
     function fireMove() {
         var x = parseFloat(document.getElementById('move-x').value) || 0;
         var y = parseFloat(document.getElementById('move-y').value) || 0;
         var yawRad = parseFloat(document.getElementById('move-yaw').value) || 0;
         var goal = new ROSLIB.Goal({
-            actionClient: moveClient,
+            actionClient: getMoveClient(),
             goalMessage: {
                 pid_profile: 1, x: x, y: y,
                 yaw_deg: yawRad * 180 / Math.PI,
