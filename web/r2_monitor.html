@@ -91,20 +91,51 @@
             left: 0;
         }
 
-        /* ====== 右侧状态面板 ====== */
+        /* ====== 右侧状态面板（透明容器） ====== */
         .status-panel {
             width: 220px;
             flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 12px;
+            color: #333;
+        }
+        .panel-section {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
             background: white;
             border-radius: 10px;
             box-shadow: 2px 2px 10px rgba(0,0,0,0.08);
-            padding: 12px;
+            padding: 10px;
+        }
+        .panel-topic { flex: 2; }
+        .panel-action { flex: 1; }
+        .panel-section-title {
+            font-weight: bold;
+            font-size: 14px;
+            color: #333;
+            padding-bottom: 4px;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 4px;
+            flex-shrink: 0;
+        }
+        .panel-section-body {
+            flex: 1;
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            font-size: 12px;
-            color: #333;
-            overflow-y: auto;
+            gap: 6px;
+            padding-right: 2px;
+        }
+        .big-dot {
+            display: inline-block;
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
         }
         .status-panel .section-title {
             font-weight: bold;
@@ -131,6 +162,129 @@
         .indicator-error { background: #F44336; }
         .indicator-idle  { background: #bbb; }
 
+        /* ====== Action 面板 ====== */
+        .action-control-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+        .start-btn-wrapper {
+            width: 50px; height: 50px;
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 10;
+            border: 2px solid transparent;
+            padding: 1px;
+            transition: border-color 0.2s;
+        }
+        .start-btn-wrapper.locked { border-color: #4CAF50; }
+        .start-btn-wrapper.unlocked { border-color: transparent; }
+
+        .start-btn {
+            width: 44px; height: 44px;
+            border: none; border-radius: 7px;
+            background-color: #4CAF50;
+            color: white;
+            font-size: 20px; font-weight: bold;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            touch-action: none;
+        }
+        .start-btn:active { transform: scale(0.96); }
+
+        .progress-fill {
+            position: absolute;
+            top: 4px; height: 41px;
+            left: 0; right: 0;
+            background: rgba(76, 175, 80, 0.3);
+            z-index: 5;
+            pointer-events: none;
+            transform: scaleX(0);
+            transform-origin: left center;
+            border-radius: 7px;
+        }
+        .progress-fill.retracting {
+            transition: transform 0.3s ease;
+        }
+
+        .region-cycler {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex: 1;
+            justify-content: center;
+        }
+        .region-arrow {
+            width: 24px; height: 24px;
+            border: none;
+            border-radius: 5px;
+            background: #e8e8e8;
+            color: #555;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s;
+            flex-shrink: 0;
+        }
+        .region-arrow:hover { background: #d5d5d5; }
+        .region-arrow:active { background: #ccc; }
+        .region-text {
+            font-size: 12px;
+            font-weight: 600;
+            color: #333;
+            min-width: 50px;
+            text-align: center;
+            user-select: none;
+        }
+
+        .title-dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        .data-dot {
+            display: inline-block;
+            width: 5px; height: 5px;
+            border-radius: 50%;
+            margin-right: 2px;
+            vertical-align: middle;
+            flex-shrink: 0;
+        }
+        .data-cell {
+            display: inline-flex;
+            align-items: center;
+            gap: 1px;
+            font-size: 10px;
+        }
+        .data-cell .data-label {
+            color: #999;
+            font-size: 9px;
+            margin-right: 1px;
+        }
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .dot-ok    { background: #4CAF50; }
+        .dot-warn  { background: #FF9800; }
+        .dot-error { background: #F44336; }
+        .dot-idle  { background: #bbb; }
+
         /* ====== 响应式：窄屏面板移到底部 ====== */
         @media (max-width: 749px) {
             .main-row {
@@ -139,15 +293,22 @@
             .status-panel {
                 width: 100%;
                 flex-shrink: 1;
-                flex-direction: row;
-                flex-wrap: wrap;
-                gap: 8px 16px;
-                padding: 8px 12px;
+                flex-direction: column;
+                gap: 4px;
+                padding: 0;
                 font-size: 11px;
-                max-height: 120px;
+                max-height: 200px;
+            }
+            .panel-section {
+                padding: 6px 8px;
+            }
+            .panel-topic { flex: 2; }
+            .panel-action { flex: 1; }
+            .panel-section-title {
+                font-size: 12px;
             }
             .status-panel .section-title {
-                width: 100%;
+                width: auto;
                 font-size: 11px;
             }
         }
@@ -236,69 +397,46 @@
                 <canvas id="field-canvas"></canvas>
             </div>
             <div class="status-panel" id="status-panel">
-                <div class="section-title">/odin1/relocation</div>
-                <div class="status-row">
-                    <span class="status-label">连接</span>
-                    <span><span class="status-indicator indicator-idle" id="ind-conn"></span><span class="status-value" id="val-conn">--</span></span>
+                <div class="panel-section panel-topic" id="panel-topic">
+                    <div class="panel-section-title"><span class="big-dot dot-idle" id="dot-topic"></span>Topic</div>
+                    <div class="panel-section-body">
+                        <div class="section-title"><span class="title-dot dot-idle" id="dot-reloc"></span>/odin1/relocation</div>
+                        <div class="data-row" id="row-reloc">
+                            <span class="data-cell"><span class="data-dot dot-error" id="ddot-x"></span><span class="data-label">X</span><span class="status-value" id="val-x">--</span></span>
+                            <span class="data-cell"><span class="data-dot dot-error" id="ddot-y"></span><span class="data-label">Y</span><span class="status-value" id="val-y">--</span></span>
+                            <span class="data-cell"><span class="data-dot dot-error" id="ddot-yaw"></span><span class="data-label">Yaw</span><span class="status-value" id="val-yaw">--</span></span>
+                        </div>
+                        <div class="section-title" style="margin-top:2px;"><span class="title-dot dot-idle" id="dot-sensor"></span>/sensor_distances</div>
+                        <div id="sensor-data-container">
+                            <div class="data-row" id="srow-0"></div>
+                            <div class="data-row" id="srow-1"></div>
+                        </div>
+                        <div class="section-title" style="margin-top:2px;"><span class="title-dot dot-idle" id="dot-r0"></span>/r0x0121</div>
+                        <div id="r0x0121-data-container">
+                            <div class="data-row" id="r0row-0"></div>
+                            <div class="data-row" id="r0row-1"></div>
+                            <div class="data-row" id="r0row-2"></div>
+                        </div>
+                        <div class="section-title" style="margin-top:2px;"><span class="title-dot dot-idle" id="dot-aruco"></span>/aruco_comm/tx_id</div>
+                        <div class="data-row" id="row-aruco">
+                            <span class="data-cell"><span class="data-dot dot-error" id="ddot-aruco"></span><span class="status-value" id="val-aruco">--</span></span>
+                        </div>
+                    </div>
                 </div>
-                <div class="status-row">
-                    <span class="status-label">X</span>
-                    <span class="status-value" id="val-x">--</span>
-                </div>
-                <div class="status-row">
-                    <span class="status-label">Y</span>
-                    <span class="status-value" id="val-y">--</span>
-                </div>
-                <div class="status-row">
-                    <span class="status-label">偏航角</span>
-                    <span class="status-value" id="val-yaw">--</span>
-                </div>
-                <div class="status-row">
-                    <span class="status-label">数据状态</span>
-                    <span><span class="status-indicator indicator-idle" id="ind-data"></span><span class="status-value" id="val-data">等待数据</span></span>
-                </div>
-                <div class="section-title" style="margin-top:4px;">/sensor_distances</div>
-                <div class="status-row">
-                    <span class="status-label">传感器1</span>
-                    <span><span class="status-indicator indicator-idle" id="ind-s0"></span><span class="status-value" id="val-s0">--</span></span>
-                </div>
-                <div class="status-row">
-                    <span class="status-label">传感器2</span>
-                    <span><span class="status-indicator indicator-idle" id="ind-s1"></span><span class="status-value" id="val-s1">--</span></span>
-                </div>
-                <div class="status-row">
-                    <span class="status-label">传感器3</span>
-                    <span><span class="status-indicator indicator-idle" id="ind-s2"></span><span class="status-value" id="val-s2">--</span></span>
-                </div>
-                <div class="status-row">
-                    <span class="status-label">传感器4</span>
-                    <span><span class="status-indicator indicator-idle" id="ind-s3"></span><span class="status-value" id="val-s3">--</span></span>
-                </div>
-                <div class="status-row">
-                    <span class="status-label">传感器5</span>
-                    <span><span class="status-indicator indicator-idle" id="ind-s4"></span><span class="status-value" id="val-s4">--</span></span>
-                </div>
-                <div class="status-row">
-                    <span class="status-label">传感器6</span>
-                    <span><span class="status-indicator indicator-idle" id="ind-s5"></span><span class="status-value" id="val-s5">--</span></span>
-                </div>
-                <div class="status-row">
-                    <span class="status-label">传感器7</span>
-                    <span><span class="status-indicator indicator-idle" id="ind-s6"></span><span class="status-value" id="val-s6">--</span></span>
-                </div>
-                <div class="status-row">
-                    <span class="status-label">传感器8</span>
-                    <span><span class="status-indicator indicator-idle" id="ind-s7"></span><span class="status-value" id="val-s7">--</span></span>
-                </div>
-                <div class="section-title" style="margin-top:4px;">/r0x0121</div>
-                <div class="status-row">
-                    <span class="status-label">连接</span>
-                    <span><span class="status-indicator indicator-idle" id="ind-r0-conn"></span><span class="status-value" id="val-r0-conn">--</span></span>
-                </div>
-                <div id="r0x0121-data-container">
-                    <div class="status-row">
-                        <span class="status-label">数据</span>
-                        <span class="status-value" id="val-r0-data" style="font-size:10px;">等待数据</span>
+                <div class="panel-section panel-action" id="panel-action">
+                    <div class="panel-section-title">Action</div>
+                    <div class="panel-section-body">
+                        <div class="action-control-row" id="action-control-row">
+                            <div class="start-btn-wrapper locked" id="start-btn-wrapper">
+                                <button class="start-btn" id="start-btn">启</button>
+                            </div>
+                            <div class="progress-fill" id="progress-fill"></div>
+                            <div class="region-cycler" id="region-cycler">
+                                <button class="region-arrow" id="region-prev">&#9664;</button>
+                                <span class="region-text" id="region-text">full</span>
+                                <button class="region-arrow" id="region-next">&#9654;</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -387,12 +525,21 @@
         rosConnected = false;
         poseReceived = false;
         robotPose = null;
+        sensorDistances = [];
+        r0x0121Data = [];
+        arucoValue = NaN;
         updateStatusPanel();
+        updateSensorPanel();
+        updateR0x0121Panel();
+        updateArucoPanel();
         if (currentTeam) drawField();
     });
     ros.on('error', function() {
         rosConnected = false;
         updateStatusPanel();
+        updateSensorPanel();
+        updateR0x0121Panel();
+        updateArucoPanel();
     });
 
     // 订阅 /odin1/relocation (geometry_msgs/PoseStamped)
@@ -478,7 +625,6 @@
 
     // 订阅 /r0x0121 (std_msgs/Float32MultiArray)
     let r0x0121Data = [];
-    let r0x0121Received = false;
 
     const r0x0121Sub = new ROSLIB.Topic({
         ros: ros,
@@ -489,7 +635,6 @@
     r0x0121Sub.subscribe(function(msg) {
         if (!msg || !msg.data || msg.data.length === 0) {
             r0x0121Data = [];
-            r0x0121Received = false;
             updateR0x0121Panel();
             return;
         }
@@ -497,140 +642,309 @@
         r0x0121Data = msg.data.map(function(v) {
             return (typeof v === 'number' && isFinite(v)) ? v : NaN;
         });
-        r0x0121Received = true;
         updateR0x0121Panel();
     });
+
+    // 订阅 /aruco_comm/tx_id (std_msgs/Int32)
+    let arucoValue = NaN;
+
+    const arucoSub = new ROSLIB.Topic({
+        ros: ros,
+        name: '/aruco_comm/tx_id',
+        messageType: 'std_msgs/Int32'
+    });
+
+    arucoSub.subscribe(function(msg) {
+        if (!msg || typeof msg.data !== 'number') {
+            arucoValue = NaN;
+        } else {
+            arucoValue = (isFinite(msg.data)) ? msg.data : NaN;
+        }
+        updateArucoPanel();
+    });
+
+    // ================================================================
+    //  更新 /aruco_comm/tx_id 面板
+    // ================================================================
+    function updateArucoPanel() {
+        var dotAruco = document.getElementById('dot-aruco');
+        var ddotAruco = document.getElementById('ddot-aruco');
+        var valAruco = document.getElementById('val-aruco');
+        if (!dotAruco || !ddotAruco || !valAruco) return;
+
+        var ok = !isNaN(arucoValue);
+        if (ok) {
+            dotAruco.className = 'title-dot dot-ok';
+            ddotAruco.className = 'data-dot dot-ok';
+            valAruco.textContent = arucoValue;
+        } else {
+            dotAruco.className = 'title-dot dot-error';
+            ddotAruco.className = 'data-dot dot-error';
+            valAruco.textContent = '--';
+        }
+        updateTopicDot();
+    }
 
     // ================================================================
     //  更新传感器面板
     // ================================================================
     function updateSensorPanel() {
+        const dotSensor = document.getElementById('dot-sensor');
+        if (!dotSensor) return;
+
+        let validCount = 0;
         for (let i = 0; i < 8; i++) {
-            const indEl = document.getElementById('ind-s' + i);
-            const valEl = document.getElementById('val-s' + i);
-            if (!indEl || !valEl) continue;
-
             const d = (i < sensorDistances.length) ? sensorDistances[i] : NaN;
-
-            if (isNaN(d)) {
-                indEl.className = 'status-indicator indicator-idle';
-                valEl.textContent = '--';
-            } else {
-                indEl.className = 'status-indicator indicator-ok';
-                valEl.textContent = d.toFixed(0) + ' mm';
-            }
+            if (!isNaN(d)) validCount++;
         }
+        if (validCount === 8) dotSensor.className = 'title-dot dot-ok';
+        else if (validCount > 0) dotSensor.className = 'title-dot dot-warn';
+        else dotSensor.className = 'title-dot dot-error';
+
+        function cellHtml(i) {
+            const d = (i < sensorDistances.length) ? sensorDistances[i] : NaN;
+            const ok = !isNaN(d);
+            const cls = ok ? 'dot-ok' : 'dot-error';
+            const val = ok ? d.toFixed(0) + 'mm' : '--';
+            return '<span class="data-cell"><span class="data-dot ' + cls + '"></span><span class="data-label">' + i + '</span><span class="status-value">' + val + '</span></span>';
+        }
+        var srow0 = document.getElementById('srow-0');
+        var srow1 = document.getElementById('srow-1');
+        if (srow0) srow0.innerHTML = cellHtml(0) + cellHtml(1) + cellHtml(2) + cellHtml(3);
+        if (srow1) srow1.innerHTML = cellHtml(4) + cellHtml(5) + cellHtml(6) + cellHtml(7);
+        updateTopicDot();
     }
 
     // ================================================================
     //  更新 /r0x0121 面板
     // ================================================================
     function updateR0x0121Panel() {
-        const indConn = document.getElementById('ind-r0-conn');
-        const valConn = document.getElementById('val-r0-conn');
-        const container = document.getElementById('r0x0121-data-container');
+        const dotR0 = document.getElementById('dot-r0');
+        if (!dotR0) return;
 
-        // 连接指示
-        if (rosConnected && r0x0121Received) {
-            indConn.className = 'status-indicator indicator-ok';
-            valConn.textContent = '正常';
-        } else if (rosConnected) {
-            indConn.className = 'status-indicator indicator-warn';
-            valConn.textContent = '等待数据';
+        const TOTAL = 11;
+        let validCount = 0;
+        for (let i = 0; i < TOTAL; i++) {
+            const d = (i < r0x0121Data.length) ? r0x0121Data[i] : NaN;
+            if (!isNaN(d)) validCount++;
+        }
+        if (validCount === TOTAL && r0x0121Data.length >= TOTAL) dotR0.className = 'title-dot dot-ok';
+        else if (validCount > 0) dotR0.className = 'title-dot dot-warn';
+        else dotR0.className = 'title-dot dot-error';
+
+        function cellHtml(i) {
+            const d = (i < r0x0121Data.length) ? r0x0121Data[i] : NaN;
+            const ok = !isNaN(d);
+            const cls = ok ? 'dot-ok' : 'dot-error';
+            const val = ok ? d.toFixed(2) : '--';
+            return '<span class="data-cell"><span class="data-dot ' + cls + '"></span><span class="data-label">' + i + '</span><span class="status-value">' + val + '</span></span>';
+        }
+        function fillRow(id, start, end) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            var h = '';
+            for (var i = start; i < end; i++) h += cellHtml(i);
+            el.innerHTML = h;
+        }
+        fillRow('r0row-0', 0, 4);
+        fillRow('r0row-1', 4, 8);
+        fillRow('r0row-2', 8, 11);
+        updateTopicDot();
+    }
+
+    // ================================================================
+    //  更新 Topic 大圆点 (聚合三个子Topic状态)
+    // ================================================================
+    function updateTopicDot() {
+        var dotReloc = document.getElementById('dot-reloc');
+        var dotSensor = document.getElementById('dot-sensor');
+        var dotR0 = document.getElementById('dot-r0');
+        var dotAruco = document.getElementById('dot-aruco');
+        var dotTopic = document.getElementById('dot-topic');
+        if (!dotTopic) return;
+
+        function level(el) {
+            if (!el) return 'error';
+            if (el.classList.contains('dot-ok')) return 'ok';
+            if (el.classList.contains('dot-warn')) return 'warn';
+            return 'error';
+        }
+
+        var levels = [level(dotReloc), level(dotSensor), level(dotR0), level(dotAruco)];
+        if (levels.every(function(l) { return l === 'ok'; })) {
+            dotTopic.className = 'big-dot dot-ok';
+        } else if (levels.every(function(l) { return l === 'error'; })) {
+            dotTopic.className = 'big-dot dot-error';
         } else {
-            indConn.className = 'status-indicator indicator-error';
-            valConn.textContent = '断开';
-        }
-
-        // 动态生成数据行
-        if (!container) return;
-
-        // 清除旧的数据行
-        var rows = container.querySelectorAll('.r0-data-row');
-        for (var i = 0; i < rows.length; i++) {
-            rows[i].remove();
-        }
-
-        if (r0x0121Data.length === 0) {
-            var row = document.createElement('div');
-            row.className = 'status-row r0-data-row';
-            row.innerHTML = '<span class="status-label">数据</span>' +
-                '<span class="status-value" style="font-size:10px;">等待数据</span>';
-            container.appendChild(row);
-            return;
-        }
-
-        // 如果数据项 ≤ 8，逐行显示
-        // 如果数据项 > 8，使用紧凑网格显示
-        if (r0x0121Data.length <= 8) {
-            for (var i = 0; i < r0x0121Data.length; i++) {
-                var row = document.createElement('div');
-                row.className = 'status-row r0-data-row';
-                var val = r0x0121Data[i];
-                var valStr = isNaN(val) ? '--' : val.toFixed(3);
-                row.innerHTML = '<span class="status-label">[' + i + ']</span>' +
-                    '<span class="status-value">' + valStr + '</span>';
-                container.appendChild(row);
-            }
-        } else {
-            // 紧凑网格：所有值在一行内换行显示
-            var row = document.createElement('div');
-            row.className = 'r0-data-row';
-            row.style.cssText = 'display:flex;flex-wrap:wrap;gap:2px 6px;font-size:10px;font-family:Consolas,monospace;color:#555;margin-top:4px;';
-            var html = '';
-            for (var i = 0; i < r0x0121Data.length; i++) {
-                var val = r0x0121Data[i];
-                var valStr = isNaN(val) ? '--' : val.toFixed(2);
-                html += '<span>[' + i + ']:<b>' + valStr + '</b></span>';
-            }
-            row.innerHTML = html;
-            container.appendChild(row);
+            dotTopic.className = 'big-dot dot-warn';
         }
     }
 
     // ================================================================
-    //  更新状态面板
+    //  Action 面板：锁定按钮 + 下拉框 + 长按发送
+    // ================================================================
+    let startLocked = true;
+    let unlockTimer = null;
+    let holdInterval = null;
+    let isHolding = false;
+    let selectedRegion = 'full';
+
+    function lockStart() {
+        clearTimeout(unlockTimer);
+        clearInterval(holdInterval);
+        startLocked = true;
+        isHolding = false;
+        var wrapper = document.getElementById('start-btn-wrapper');
+        wrapper.classList.add('locked');
+        wrapper.classList.remove('unlocked');
+        var fill = document.getElementById('progress-fill');
+        fill.classList.add('retracting');
+        fill.style.transform = 'scaleX(0)';
+        setTimeout(function() { fill.classList.remove('retracting'); }, 300);
+    }
+
+    function unlockStart() {
+        startLocked = false;
+        document.getElementById('start-btn-wrapper').classList.remove('locked');
+        document.getElementById('start-btn-wrapper').classList.add('unlocked');
+        unlockTimer = setTimeout(lockStart, 1000);
+    }
+
+    function beginHold() {
+        clearTimeout(unlockTimer);
+        isHolding = true;
+        var fill = document.getElementById('progress-fill');
+        var btn = document.getElementById('start-btn');
+        var row = document.getElementById('action-control-row');
+        var btnRect = btn.getBoundingClientRect();
+        var rowLeft = row.getBoundingClientRect().left;
+        fill.style.left = (btnRect.right - rowLeft - 10) + 'px';
+        fill.classList.remove('retracting');
+        fill.style.transform = 'scaleX(0)';
+
+        var elapsed = 0;
+        holdInterval = setInterval(function() {
+            elapsed += 50;
+            var pct = Math.min(elapsed / 1000, 1);
+            fill.style.transform = 'scaleX(' + pct + ')';
+            if (elapsed >= 1000) {
+                clearInterval(holdInterval);
+                fireStart();
+                lockStart();
+            }
+        }, 50);
+    }
+
+    // ---- 按钮事件 ----
+    (function() {
+        var startBtn = document.getElementById('start-btn');
+        if (!startBtn) return;
+
+        startBtn.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            if (startLocked) { unlockStart(); }
+            else { beginHold(); }
+        });
+
+        document.addEventListener('mouseup', function(e) {
+            if (isHolding) {
+                clearInterval(holdInterval);
+                lockStart();
+            }
+        });
+
+        startBtn.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            if (startLocked) { unlockStart(); }
+            else { beginHold(); }
+        }, { passive: false });
+
+        document.addEventListener('touchend', function(e) {
+            if (isHolding) {
+                clearInterval(holdInterval);
+                lockStart();
+            }
+        });
+    })();
+
+    // ---- 区域循环选择 ----
+    (function() {
+        var REGIONS = ['full', 'prepare', 'meilin', 'final', 'meilin_final'];
+        var regionIndex = 0;
+        var textEl = document.getElementById('region-text');
+        var prevBtn = document.getElementById('region-prev');
+        var nextBtn = document.getElementById('region-next');
+        if (!textEl || !prevBtn || !nextBtn) return;
+
+        function update() {
+            selectedRegion = REGIONS[regionIndex];
+            textEl.textContent = selectedRegion;
+        }
+
+        prevBtn.addEventListener('click', function() {
+            regionIndex = (regionIndex - 1 + REGIONS.length) % REGIONS.length;
+            update();
+        });
+        nextBtn.addEventListener('click', function() {
+            regionIndex = (regionIndex + 1) % REGIONS.length;
+            update();
+        });
+    })();
+
+    // ---- ROS 服务：/bt_engine/start_autonomy ----
+    var startAutonomyService = new ROSLIB.Service({
+        ros: ros,
+        name: '/bt_engine/start_autonomy',
+        serviceType: 'r2_interfaces/srv/StartAutonomy'
+    });
+
+    function fireStart() {
+        var request = new ROSLIB.ServiceRequest({ region: selectedRegion });
+        startAutonomyService.callService(request, function(result) {
+            if (result && result.success) {
+                console.log('start_autonomy success:', result.message);
+            } else {
+                console.error('start_autonomy failed:', result ? result.message : 'no response');
+            }
+        });
+    }
+
+    // ================================================================
+    //  更新 /odin1/relocation 面板
     // ================================================================
     function updateStatusPanel() {
-        const connInd = document.getElementById('ind-conn');
-        const valConn = document.getElementById('val-conn');
+        const dotReloc = document.getElementById('dot-reloc');
+        const ddotX = document.getElementById('ddot-x');
+        const ddotY = document.getElementById('ddot-y');
+        const ddotYaw = document.getElementById('ddot-yaw');
         const valX = document.getElementById('val-x');
         const valY = document.getElementById('val-y');
         const valYaw = document.getElementById('val-yaw');
-        const indData = document.getElementById('ind-data');
-        const valData = document.getElementById('val-data');
 
-        // 连接状态
-        if (rosConnected) {
-            connInd.className = 'status-indicator indicator-ok';
-            valConn.textContent = '已连接';
-        } else {
-            connInd.className = 'status-indicator indicator-error';
-            valConn.textContent = '断开';
-        }
+        const hasPose = poseReceived && robotPose;
 
-        // 数据状态
-        if (!poseReceived || !robotPose) {
-            indData.className = 'status-indicator indicator-idle';
-            valData.textContent = '等待数据';
+        // 标题圆点
+        if (hasPose && !robotPose.outlier) dotReloc.className = 'title-dot dot-ok';
+        else if (hasPose && robotPose.outlier) dotReloc.className = 'title-dot dot-warn';
+        else dotReloc.className = 'title-dot dot-error';
+
+        if (!hasPose) {
+            ddotX.className = 'data-dot dot-error';
+            ddotY.className = 'data-dot dot-error';
+            ddotYaw.className = 'data-dot dot-error';
             valX.textContent = '--';
             valY.textContent = '--';
             valYaw.textContent = '--';
-        } else if (robotPose.outlier) {
-            indData.className = 'status-indicator indicator-warn';
-            valData.textContent = '超出场地';
-            valX.textContent = (robotPose.x / 1000).toFixed(3) + 'm';
-            valY.textContent = (robotPose.y / 1000).toFixed(3) + 'm';
-            valYaw.textContent = robotPose.yaw !== null
-                ? (robotPose.yaw * 180 / Math.PI).toFixed(1) + '°' : '--';
         } else {
-            indData.className = 'status-indicator indicator-ok';
-            valData.textContent = '已定位';
-            valX.textContent = (robotPose.x / 1000).toFixed(3) + 'm';
-            valY.textContent = (robotPose.y / 1000).toFixed(3) + 'm';
+            ddotX.className = 'data-dot dot-ok';
+            ddotY.className = 'data-dot dot-ok';
+            ddotYaw.className = 'data-dot ' + (robotPose.yaw !== null ? 'dot-ok' : 'dot-error');
+            valX.textContent = (robotPose.x / 1000).toFixed(4) + 'm';
+            valY.textContent = (robotPose.y / 1000).toFixed(4) + 'm';
             valYaw.textContent = robotPose.yaw !== null
-                ? (robotPose.yaw * 180 / Math.PI).toFixed(1) + '°' : '--';
+                ? (robotPose.yaw * 180 / Math.PI).toFixed(3) + '°' : '--';
         }
+        updateTopicDot();
     }
 
     // ================================================================
