@@ -502,7 +502,6 @@
         </div>
     </div>
 
-    <script src="roslib.js"></script>
     <script>
     // ================================================================
     //  场地坐标数据 (单位: mm)
@@ -551,161 +550,90 @@
     // ================================================================
     //  机器人定位状态
     // ================================================================
-    let robotPose = null;       // { x, y, yaw, frame_id, stamp } 或 null
-    let rosConnected = false;
+    let robotPose = null;       // { x, y, yaw } (mm, mm, rad) 或 null
+    let httpConnected = false;
     let poseReceived = false;
 
     // ================================================================
-    //  ROS 连接
+    //  HTTP API 连接
     // ================================================================
-    const rosHost = window.location.hostname || 'localhost';
-    const ros = new ROSLIB.Ros({ url: 'ws://' + rosHost + ':9090' });
-
-    ros.on('connection', function() {
-        rosConnected = true;
-        updateStatusPanel();
-    });
-    ros.on('close', function() {
-        rosConnected = false;
-        poseReceived = false;
-        robotPose = null;
-        sensorDistances = [];
-        r0x0121Data = [];
-        arucoValue = NaN;
-        updateStatusPanel();
-        updateSensorPanel();
-        updateR0x0121Panel();
-        updateArucoPanel();
-        if (currentTeam) drawField();
-    });
-    ros.on('error', function() {
-        rosConnected = false;
-        updateStatusPanel();
-        updateSensorPanel();
-        updateR0x0121Panel();
-        updateArucoPanel();
-    });
-
-    // 订阅 /odin1/relocation (geometry_msgs/PoseStamped)
-    const relocationSub = new ROSLIB.Topic({
-        ros: ros,
-        name: '/odin1/relocation',
-        messageType: 'geometry_msgs/PoseStamped'
-    });
-
-    relocationSub.subscribe(function(msg) {
-        if (!msg || !msg.pose) {
-            robotPose = null;
-            poseReceived = false;
-            updateStatusPanel();
-            return;
-        }
-
-        const px = msg.pose.position.x * 1000;  // m → mm
-        const py = msg.pose.position.y * 1000;
-        const pz = msg.pose.position.z * 1000;
-
-        // 合法性检查
-        if (!isFinite(px) || !isFinite(py) || !isFinite(pz)) {
-            robotPose = null;
-            poseReceived = false;
-            updateStatusPanel();
-            return;
-        }
-
-        // 超出场地范围视为异常
-        if (currentTeam) {
-            const b = FIELD_CONFIG[currentTeam].boundary;
-            if (px < b.minX - 1000 || px > b.maxX + 1000 ||
-                py < b.minY - 1000 || py > b.maxY + 1000) {
-                robotPose = { x: px, y: py, yaw: null, frame_id: msg.header.frame_id, outlier: true };
-                poseReceived = true;
-                updateStatusPanel();
-                if (currentTeam) drawField();
-                return;
-            }
-        }
-
-        // 四元数 → yaw
-        let yaw = null;
-        if (msg.pose.orientation) {
-            const q = msg.pose.orientation;
-            const siny = 2 * (q.w * q.z + q.x * q.y);
-            const cosy = 1 - 2 * (q.y * q.y + q.z * q.z);
-            yaw = Math.atan2(siny, cosy);
-        }
-
-        robotPose = {
-            x: px, y: py, yaw: yaw,
-            frame_id: msg.header.frame_id || '',
-            outlier: false
-        };
-        poseReceived = true;
-        updateStatusPanel();
-        if (currentTeam) drawField();
-    });
-
-    // 订阅 /sensor_distances (std_msgs/Float32MultiArray)
-    let sensorDistances = [];   // 8 个传感器的距离，NaN 表示无效
-
-    const sensorSub = new ROSLIB.Topic({
-        ros: ros,
-        name: '/sensor_distances',
-        messageType: 'std_msgs/Float32MultiArray'
-    });
-
-    sensorSub.subscribe(function(msg) {
-        if (!msg || !msg.data || msg.data.length === 0) {
-            sensorDistances = [];
-            updateSensorPanel();
-            return;
-        }
-
-        sensorDistances = msg.data.map(function(v) {
-            return (typeof v === 'number' && isFinite(v)) ? v : NaN;
-        });
-        updateSensorPanel();
-    });
-
-    // 订阅 /r0x0121 (std_msgs/Float32MultiArray)
+    const API_BASE = 'http://' + (window.location.hostname || 'localhost') + ':8765';
+    let sensorDistances = [];
     let r0x0121Data = [];
-
-    const r0x0121Sub = new ROSLIB.Topic({
-        ros: ros,
-        name: '/r0x0121',
-        messageType: 'std_msgs/Float32MultiArray'
-    });
-
-    r0x0121Sub.subscribe(function(msg) {
-        if (!msg || !msg.data || msg.data.length === 0) {
-            r0x0121Data = [];
-            updateR0x0121Panel();
-            return;
-        }
-
-        r0x0121Data = msg.data.map(function(v) {
-            return (typeof v === 'number' && isFinite(v)) ? v : NaN;
-        });
-        updateR0x0121Panel();
-    });
-
-    // 订阅 /aruco_comm/tx_id (std_msgs/Int32)
     let arucoValue = NaN;
 
-    const arucoSub = new ROSLIB.Topic({
-        ros: ros,
-        name: '/aruco_comm/tx_id',
-        messageType: 'std_msgs/Int32'
-    });
+    function pollData() {
+        fetch(API_BASE + '/data')
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function(data) {
+                httpConnected = true;
 
-    arucoSub.subscribe(function(msg) {
-        if (!msg || typeof msg.data !== 'number') {
-            arucoValue = NaN;
-        } else {
-            arucoValue = (isFinite(msg.data)) ? msg.data : NaN;
-        }
-        updateArucoPanel();
-    });
+                // relocation
+                if (data.reloc) {
+                    var rx = data.reloc.x;
+                    var ry = data.reloc.y;
+                    var yawRad = data.reloc.yaw_deg * Math.PI / 180;
+                    if (isFinite(rx) && isFinite(ry)) {
+                        // 超出场地范围视为异常
+                        var outlier = false;
+                        if (currentTeam) {
+                            var b = FIELD_CONFIG[currentTeam].boundary;
+                            if (rx < b.minX - 1000 || rx > b.maxX + 1000 ||
+                                ry < b.minY - 1000 || ry > b.maxY + 1000) {
+                                outlier = true;
+                            }
+                        }
+                        robotPose = { x: rx, y: ry, yaw: yawRad, outlier: outlier };
+                        poseReceived = true;
+                    }
+                }
+
+                // sensor_distances
+                if (data.sensors && data.sensors.length > 0) {
+                    sensorDistances = data.sensors.map(function(v) {
+                        return (typeof v === 'number' && isFinite(v)) ? v : NaN;
+                    });
+                }
+
+                // r0x0121
+                if (data.r0x0121 && data.r0x0121.length > 0) {
+                    r0x0121Data = data.r0x0121.map(function(v) {
+                        return (typeof v === 'number' && isFinite(v)) ? v : NaN;
+                    });
+                }
+
+                // aruco
+                if (typeof data.aruco === 'number' && isFinite(data.aruco)) {
+                    arucoValue = data.aruco;
+                } else {
+                    arucoValue = NaN;
+                }
+
+                updateStatusPanel();
+                updateSensorPanel();
+                updateR0x0121Panel();
+                updateArucoPanel();
+                if (currentTeam) drawField();
+            })
+            .catch(function() {
+                httpConnected = false;
+                poseReceived = false;
+                robotPose = null;
+                sensorDistances = [];
+                r0x0121Data = [];
+                arucoValue = NaN;
+                updateStatusPanel();
+                updateSensorPanel();
+                updateR0x0121Panel();
+                updateArucoPanel();
+                if (currentTeam) drawField();
+            });
+    }
+
+    setInterval(pollData, 50);  // 20 Hz
 
     // ================================================================
     //  更新 /aruco_comm/tx_id 面板
@@ -937,69 +865,34 @@
         });
     })();
 
-    // ---- ROS 服务：/bt_engine/start_autonomy ----
-    var startAutonomyService = new ROSLIB.Service({
-        ros: ros,
-        name: '/bt_engine/start_autonomy',
-        serviceType: 'r2_interfaces/srv/StartAutonomy'
-    });
+    // ---- HTTP POST /action ----
+    function postAction(data) {
+        fetch(API_BASE + '/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        }).catch(function(e) { console.error('action failed:', e); });
+    }
 
     function fireStart() {
-        var request = new ROSLIB.ServiceRequest({ region: selectedRegion });
-        startAutonomyService.callService(request, function(result) {
-            if (result && result.success) {
-                console.log('start_autonomy success:', result.message);
-            } else {
-                console.error('start_autonomy failed:', result ? result.message : 'no response');
-            }
-        });
+        postAction({ action: 'start', region: selectedRegion });
     }
-
-    // ---- "移" move_to_pose（懒加载，避免页面加载时触发 rosbridge 报错）----
-    var moveClient = null;
-
-    function getMoveClient() {
-        if (!moveClient) {
-            moveClient = new ROSLIB.ActionClient({
-                ros: ros, serverName: '/move_to_pose',
-                actionName: 'action_of_motion_interfaces/action/MoveToPose'
-            });
-        }
-        return moveClient;
-    }
-
     function fireMove() {
-        var x = parseFloat(document.getElementById('move-x').value) || 0;
-        var y = parseFloat(document.getElementById('move-y').value) || 0;
-        var yawRad = parseFloat(document.getElementById('move-yaw').value) || 0;
-        var goal = new ROSLIB.Goal({
-            actionClient: getMoveClient(),
-            goalMessage: {
-                pid_profile: 1, x: x, y: y,
-                yaw_deg: yawRad * 180 / Math.PI,
-                max_vel: 0, max_wz: 0,
-                completion_distance: 0,
-                completion_position_only: false,
-                skip_brake_on_success: false
-            }
+        postAction({
+            action: 'move',
+            x: parseFloat(document.getElementById('move-x').value) || 0,
+            y: parseFloat(document.getElementById('move-y').value) || 0,
+            yaw: parseFloat(document.getElementById('move-yaw').value) || 0
         });
-        goal.send();
-        console.log('move_to_pose sent: x=' + x + ' y=' + y + ' yaw_deg=' + (yawRad * 180 / Math.PI).toFixed(1));
     }
-
-    // ---- "升" t0x0112_action ----
-    var liftPub = new ROSLIB.Topic({
-        ros: ros, name: 't0x0112_action',
-        messageType: 'std_msgs/Float32MultiArray'
-    });
-
     function fireLift() {
-        var fl = parseFloat(document.getElementById('lift-fl').value) || 0;
-        var fr = parseFloat(document.getElementById('lift-fr').value) || 0;
-        var rl = parseFloat(document.getElementById('lift-rl').value) || 0;
-        var rr = parseFloat(document.getElementById('lift-rr').value) || 0;
-        liftPub.publish(new ROSLIB.Message({ data: [fl, fr, rl, rr] }));
-        console.log('lift sent: [' + fl + ', ' + fr + ', ' + rl + ', ' + rr + '] mm');
+        postAction({
+            action: 'lift',
+            fl: parseFloat(document.getElementById('lift-fl').value) || 0,
+            fr: parseFloat(document.getElementById('lift-fr').value) || 0,
+            rl: parseFloat(document.getElementById('lift-rl').value) || 0,
+            rr: parseFloat(document.getElementById('lift-rr').value) || 0
+        });
     }
 
     // ---- 实例化三个按钮 ----
@@ -1022,7 +915,8 @@
         const hasPose = poseReceived && robotPose;
 
         // 标题圆点
-        if (hasPose && !robotPose.outlier) dotReloc.className = 'title-dot dot-ok';
+        if (!httpConnected) dotReloc.className = 'title-dot dot-error';
+        else if (hasPose && !robotPose.outlier) dotReloc.className = 'title-dot dot-ok';
         else if (hasPose && robotPose.outlier) dotReloc.className = 'title-dot dot-warn';
         else dotReloc.className = 'title-dot dot-error';
 

@@ -4,9 +4,10 @@ mf_action_planner 完整启动文件
 
 启动顺序：
 1. rosbridge_server (rosbridge_websocket) — WebSocket 桥接
-2. mf_buffer_node                         — 暂存区（缓存 /mf_action_seq）
-3. 自动打开 mf_manager.html 网页         — 可视化交互界面
-4. dfs_planner_node                      — DFS 路径规划节点
+2. monitor_node                          — HTTP 中继（Topic 限频 + Action 代理，端口 8765）
+3. mf_buffer_node                        — 暂存区（缓存 /mf_action_seq）
+4. 自动打开 mf_manager.html 网页        — 可视化交互界面
+5. dfs_planner_node                      — DFS 路径规划节点
 """
 
 from launch import LaunchDescription
@@ -102,6 +103,17 @@ def generate_launch_description():
     )
 
     # ============================
+    # 4. monitor_node — HTTP 中继（Topic 限频 + Action 代理）
+    # ============================
+    monitor_node = Node(
+        package='mf_action_planner',
+        executable='monitor_node',
+        name='monitor_node',
+        arguments=['--ros-args', '--log-level', 'INFO'],
+        output='screen',
+    )
+
+    # ============================
     # 事件处理：等 rosbridge 启动后再打开网页
     # ============================
     delayed_browser_open = RegisterEventHandler(
@@ -121,6 +133,7 @@ def generate_launch_description():
     # ============================
     ld = LaunchDescription(declared_arguments)
     ld.add_action(rosbridge_node)
+    ld.add_action(monitor_node)
     ld.add_action(buffer_node)
     ld.add_action(delayed_browser_open)
     ld.add_action(dfs_planner_node)
