@@ -249,6 +249,29 @@
             user-select: none;
         }
 
+        .prepare-pickups-row {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 4px;
+        }
+        .prepare-pickup-btn {
+            height: 28px;
+            border: none;
+            border-radius: 6px;
+            background: #e8e8e8;
+            color: #555;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s, color 0.15s, transform 0.1s;
+        }
+        .prepare-pickup-btn.selected {
+            background: #4CAF50;
+            color: #fff;
+        }
+        .prepare-pickup-btn:active { transform: scale(0.96); }
+
         .action-inputs {
             display: flex;
             align-items: center;
@@ -458,6 +481,14 @@
                                 <button class="region-arrow" id="region-next">&#9654;</button>
                             </div>
                         </div>
+                        <div class="prepare-pickups-row" id="prepare-pickups-row">
+                            <button class="prepare-pickup-btn" data-index="1">1</button>
+                            <button class="prepare-pickup-btn" data-index="2">2</button>
+                            <button class="prepare-pickup-btn" data-index="3">3</button>
+                            <button class="prepare-pickup-btn" data-index="4">4</button>
+                            <button class="prepare-pickup-btn" data-index="5">5</button>
+                            <button class="prepare-pickup-btn" data-index="6">6</button>
+                        </div>
                         <div class="action-control-row" id="row-move">
                             <div class="start-btn-wrapper locked" id="move-btn-wrapper">
                                 <button class="start-btn" id="move-btn">移</button>
@@ -561,6 +592,12 @@
     let sensorDistances = [];
     let r0x0121Data = [];
     let arucoValue = NaN;
+    let topicOnline = {
+        reloc: false,
+        sensors: false,
+        r0x0121: false,
+        aruco: false
+    };
 
     function pollData() {
         fetch(API_BASE + '/data')
@@ -570,9 +607,14 @@
             })
             .then(function(data) {
                 httpConnected = true;
+                var online = data.online || {};
+                topicOnline.reloc = online.reloc === true;
+                topicOnline.sensors = online.sensors === true;
+                topicOnline.r0x0121 = online.r0x0121 === true;
+                topicOnline.aruco = online.aruco === true;
 
                 // relocation
-                if (data.reloc) {
+                if (topicOnline.reloc && data.reloc) {
                     var rx = data.reloc.x;
                     var ry = data.reloc.y;
                     var yawRad = data.reloc.yaw_deg * Math.PI / 180;
@@ -589,24 +631,31 @@
                         robotPose = { x: rx, y: ry, yaw: yawRad, outlier: outlier };
                         poseReceived = true;
                     }
+                } else {
+                    robotPose = null;
+                    poseReceived = false;
                 }
 
                 // sensor_distances
-                if (data.sensors && data.sensors.length > 0) {
+                if (topicOnline.sensors && data.sensors && data.sensors.length > 0) {
                     sensorDistances = data.sensors.map(function(v) {
                         return (typeof v === 'number' && isFinite(v)) ? v : NaN;
                     });
+                } else {
+                    sensorDistances = [];
                 }
 
                 // r0x0121
-                if (data.r0x0121 && data.r0x0121.length > 0) {
+                if (topicOnline.r0x0121 && data.r0x0121 && data.r0x0121.length > 0) {
                     r0x0121Data = data.r0x0121.map(function(v) {
                         return (typeof v === 'number' && isFinite(v)) ? v : NaN;
                     });
+                } else {
+                    r0x0121Data = [];
                 }
 
                 // aruco
-                if (typeof data.aruco === 'number' && isFinite(data.aruco)) {
+                if (topicOnline.aruco && typeof data.aruco === 'number' && isFinite(data.aruco)) {
                     arucoValue = data.aruco;
                 } else {
                     arucoValue = NaN;
@@ -625,6 +674,12 @@
                 sensorDistances = [];
                 r0x0121Data = [];
                 arucoValue = NaN;
+                topicOnline = {
+                    reloc: false,
+                    sensors: false,
+                    r0x0121: false,
+                    aruco: false
+                };
                 updateStatusPanel();
                 updateSensorPanel();
                 updateR0x0121Panel();
@@ -633,7 +688,7 @@
             });
     }
 
-    setInterval(pollData, 50);  // 20 Hz
+    setInterval(pollData, 20);  // 50 Hz
 
     // ================================================================
     //  更新 /aruco_comm/tx_id 面板
@@ -840,10 +895,19 @@
     });
 
     let selectedRegion = 'full';
+    let selectedPreparePickups = [];
 
     // ---- 区域循环选择 ----
     (function() {
-        var REGIONS = ['full', 'prepare', 'meilin', 'final', 'meilin_final'];
+        var REGIONS = [
+            'full',
+            'prepare',
+            'meilin',
+            'meilin_final',
+            'capacity_1',
+            'final',
+            'special_final'
+        ];
         var regionIndex = 0;
         var textEl = document.getElementById('region-text');
         var prevBtn = document.getElementById('region-prev');
@@ -865,6 +929,31 @@
         });
     })();
 
+    (function() {
+        var row = document.getElementById('prepare-pickups-row');
+        if (!row) return;
+
+        var buttons = row.querySelectorAll('.prepare-pickup-btn');
+        function sync() {
+            selectedPreparePickups = [];
+            for (var i = 0; i < buttons.length; i++) {
+                var btn = buttons[i];
+                var idx = parseInt(btn.getAttribute('data-index'), 10);
+                if (btn.classList.contains('selected') && isFinite(idx)) {
+                    selectedPreparePickups.push(idx);
+                }
+            }
+            selectedPreparePickups.sort(function(a, b) { return a - b; });
+        }
+
+        for (var i = 0; i < buttons.length; i++) {
+            buttons[i].addEventListener('click', function() {
+                this.classList.toggle('selected');
+                sync();
+            });
+        }
+    })();
+
     // ---- HTTP POST /action ----
     function postAction(data) {
         fetch(API_BASE + '/action', {
@@ -875,7 +964,11 @@
     }
 
     function fireStart() {
-        postAction({ action: 'start', region: selectedRegion });
+        postAction({
+            action: 'start',
+            region: selectedRegion,
+            prepare_pickup_indices: selectedPreparePickups.slice()
+        });
     }
     function fireMove() {
         postAction({
