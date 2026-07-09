@@ -202,13 +202,6 @@ class MonitorNode(Node):
         req = StartAutonomy.Request()
         region = data.get('region', 'full')
         req.region = region
-        indices = data.get('prepare_pickup_indices', [])
-        if not isinstance(indices, list):
-            indices = []
-        req.prepare_pickup_indices = [
-            int(v) for v in indices
-            if isinstance(v, (int, float)) and int(v) == v
-        ]
         fut = self._start_cli.call_async(req)
         fut.add_done_callback(
             lambda f: self.get_logger().info(
