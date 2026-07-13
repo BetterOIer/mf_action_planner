@@ -24,7 +24,7 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_DIR = os.path.dirname(_SCRIPT_DIR)
 sys.path.insert(0, _PROJECT_DIR)
 
-from test.kfs_placement_analysis import (
+from TreeAction.mf_action_planner.test.kfs_placement_analysis import (
     enumerate_valid_grids,
     BatchDFSPlanner,
     HEIGHT_MAP_RED,
